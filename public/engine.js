@@ -282,6 +282,7 @@ const DICT = {
   save_digital:{ar:'حفظ القراءات',en:'Save readings'},
   pick_shift:{ar:'اختر الوردية',en:'Select shift'},
   digital_hidden:{ar:'التجميع والمقارنة متاحة لمدير الفرع فقط — اكتب القراءات واحفظ.',en:'Totals & comparison visible to branch manager only — enter readings and save.'},
+  dig_locked:{ar:'هذا اليوم محفوظ — التعديل متاح للمدير العام فقط.',en:'This day is saved — only the super admin can edit it.'},
   comparison:{ar:'المقارنة (ديجيتال / ميكانيكي / الفرق)',en:'Comparison (digital / mechanical / diff)'},
   no_shifts_digital:{ar:'سجّل وردية الأول عشان تدخّل قراءاتها الرقمية.',en:'Record a shift first to enter its digital readings.'},
   daily_mode:{ar:'يومي',en:'Daily'},
@@ -2310,14 +2311,17 @@ VIEWS.digital_mech=function(){
   if(!window._dig||window._digDate!==digDate)digDailyLoad();
   const dig=window._dig;
   const saved=digEntries().map(e=>e.date).sort().reverse();
+  const locked=!!digEntryFor(digDate)&&!isSuper();   // saved day → only super admin edits
+  window._digLocked=locked;
   h+=`<div class="toolbar no-print">
     <div class="field" style="margin:0"><label style="display:none">d</label>
       <input type="date" value="${esc(digDate)}" oninput="digDate=this.value;digDailyLoad();render()"></div>
     ${saved.length?`<div class="field" style="margin:0;min-width:150px"><label style="display:none">s</label>
       <select onchange="digDate=this.value;digDailyLoad();render()"><option value="">— أيام مسجّلة —</option>${saved.map(d=>`<option value="${d}" ${d===digDate?'selected':''}>${fmtDate(d)}</option>`).join('')}</select></div>`:''}
     <span class="spacer"></span>
-    <button class="btn btn-primary" onclick="saveDigital()">${icon('file')} ${t('save_digital')}</button>
+    ${locked?'':`<button class="btn btn-primary" onclick="saveDigital()">${icon('file')} ${t('save_digital')}</button>`}
     <button class="btn" onclick="window.print()">${t('print')}</button></div>`;
+  if(locked)h+=`<div class="note no-print" style="margin-bottom:14px">${icon('file')}<div>${t('dig_locked')}</div></div>`;
   if(!canEdit())h+=`<div class="note no-print" style="margin-bottom:14px">${icon('file')}<div>${t('digital_hidden')}</div></div>`;
 
   h+=`<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(520px,1fr))">`;
@@ -2333,13 +2337,14 @@ VIEWS.digital_mech=function(){
 };
 function digPumpTable(type,pi,pump,title,withFuel){
   const N=[0,1,2,3];
-  const fuelRow=withFuel?`<tr><td class="lbl">${t('fuel_type')}</td>${N.map(ni=>`<td><select class="side-in" style="text-align:center" onchange="digSet('${type}',${pi},${ni},'fuel',this.value)">
+  const lk=window._digLocked?'disabled':'',lki=window._digLocked?'readonly':'';
+  const fuelRow=withFuel?`<tr><td class="lbl">${t('fuel_type')}</td>${N.map(ni=>`<td><select class="side-in" style="text-align:center" ${lk} onchange="digSet('${type}',${pi},${ni},'fuel',this.value)">
       <option value="92" ${pump.nozzles[ni].fuel==='92'?'selected':''}>92</option><option value="95" ${pump.nozzles[ni].fuel==='95'?'selected':''}>95</option></select></td>`).join('')}</tr>`:'';
   return `<div class="card card-pad"><div class="form-sec" style="margin-top:0">${esc(title)}</div>
     <table class="form-tbl digtbl"><thead><tr><th>${t('label')}</th>${NOZ_LABELS.map(l=>`<th>${l}</th>`).join('')}</tr></thead><tbody>
       ${fuelRow}
-      <tr><td class="lbl">${t('today_morning')}</td>${N.map(ni=>`<td><input class="side-in" type="number" step="any" value="${pump.nozzles[ni].today}" oninput="digSet('${type}',${pi},${ni},'today',this.value)"></td>`).join('')}</tr>
-      <tr><td class="lbl">${t('yest_morning')}</td>${N.map(ni=>`<td><input class="side-in" type="number" step="any" value="${pump.nozzles[ni].yest}" oninput="digSet('${type}',${pi},${ni},'yest',this.value)"></td>`).join('')}</tr>
+      <tr><td class="lbl">${t('today_morning')}</td>${N.map(ni=>`<td><input class="side-in" type="number" step="any" ${lki} value="${pump.nozzles[ni].today}" oninput="digSet('${type}',${pi},${ni},'today',this.value)"></td>`).join('')}</tr>
+      <tr><td class="lbl">${t('yest_morning')}</td>${N.map(ni=>`<td><input class="side-in" type="number" step="any" ${lki} value="${pump.nozzles[ni].yest}" oninput="digSet('${type}',${pi},${ni},'yest',this.value)"></td>`).join('')}</tr>
       <tr><td class="lbl calc">${t('diff_col')}</td>${N.map(ni=>`<td class="ro"><span id="dg_${type}_${pi}_${ni}" class="calc">0</span></td>`).join('')}</tr>
     </tbody></table></div>`;
 }
@@ -2370,6 +2375,7 @@ function digSet(type,pi,ni,field,val){
   const el=document.getElementById(`dg_${type}_${pi}_${ni}`);if(el)el.textContent=fmt(Math.max(0,n(nz.today)-n(nz.yest)),0);
 }
 function saveDigital(){
+  if(digEntryFor(digDate)&&!isSuper()){toast(t('dig_locked'),'err');return;}
   const entries=digEntries();
   const i=entries.findIndex(e=>e.date===digDate);
   const rec={id:(i>=0?entries[i].id:genId()),date:digDate,digital:window._dig};
