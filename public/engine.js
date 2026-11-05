@@ -161,6 +161,11 @@ const DICT = {
   income_col:{ar:'إيراد',en:'Income'},
   expense_col:{ar:'صرف',en:'Expense'},
   add_entry:{ar:'تسجيل حركة',en:'Add Entry'},
+  optional:{ar:'اختياري',en:'optional'},
+  other_none:{ar:'— بدون / أخرى —',en:'— None / Other —'},
+  all_months:{ar:'كل الشهور',en:'All months'},
+  print_day:{ar:'طباعة تقرير اليوم',en:'Print day report'},
+  ie_partner_hint:{ar:'لو اخترت شخص، المصروف هيتسجّل تلقائي في حسابه في «حسابات الموظفين».',en:'If you pick a person, this expense also posts to their staff account.'},
   entry_income:{ar:'إيراد',en:'Income'},
   entry_expense:{ar:'مصروف',en:'Expense'},
   entry_type:{ar:'النوع',en:'Type'},
@@ -262,6 +267,7 @@ const DICT = {
               en:'Enter your username and password. Forgot them? Ask the super admin.'},
   logout:{ar:'تسجيل الخروج',en:'Sign out'},
   super_admin:{ar:'مدير عام',en:'Super Admin'},
+  manager_all:{ar:'مدير فروع',en:'Area Manager'},
   branch_user:{ar:'مدير فرع',en:'Branch Manager'},
   data_entry:{ar:'مدخل بيانات',en:'Data Entry'},
   allowed_pages:{ar:'الصفحات المسموح بيها',en:'Allowed pages'},
@@ -469,7 +475,7 @@ function closeModal(){document.getElementById('modalRoot').innerHTML='';}
 /* ---------- navigation ---------- */
 const NAV=[
   {g:'g_main',items:[['dashboard','grid']]},
-  {g:'g_ops',items:[['inventory','box'],['shifts','clock'],['digital_mech','grid'],['tanks','droplet']]},
+  {g:'g_ops',items:[['inventory','box'],['shifts','clock'],['digital_mech','grid']]},
   {g:'g_fin',items:[['income_expense','card'],['monthly','trending'],['partners','wallet']]},
   {g:'g_sys',items:[['reports','file'],['users','users'],['settings','gear']]},
 ];
@@ -530,7 +536,7 @@ function renderTopbarUser(){
   if(!USER)return;
   const bs=document.getElementById('branchSlot'),us=document.getElementById('userSlot');
   if(bs){
-    if(isSuper()){
+    if(canAllBranches()){
       bs.innerHTML=`<div class="branch-chip">${icon('truck')}
         <select onchange="setBranch(this.value)">${APP.branches.map(b=>`<option value="${b.id}" ${b.id===APP.active.branch?'selected':''}>${esc(b.name)}</option>`).join('')}</select></div>`;
     } else {
@@ -542,7 +548,7 @@ function renderTopbarUser(){
     const cloud=(typeof CLOUD!=='undefined'&&CLOUD.on)
       ?`<span class="badge" style="background:var(--greenbg);color:var(--green);border-color:transparent" title="${t('cloud_mode')}">● ${t('cloud_badge')}</span>`:'';
     us.innerHTML=`${cloud}<div class="user-chip"><div style="line-height:1.15;text-align:${LANG==='ar'?'right':'left'}">
-        <div>${esc(USER.name||USER.username)}</div><div class="ro">${USER.role==='super'?t('super_admin'):USER.role==='entry'?t('data_entry'):t('branch_user')}</div></div>
+        <div>${esc(USER.name||USER.username)}</div><div class="ro">${roleLabel(USER.role)}</div></div>
       <div class="av">${esc(initials)}</div>
       <button class="x" title="${t('logout')}" onclick="logout()">${icon('logout')}</button></div>`;
   }
@@ -688,17 +694,20 @@ function login(username,password){
   const u=APP.users.find(x=>x.username===String(username).trim()&&x.password===String(password));
   if(!u)return false;
   APP.session.userId=u.id;USER=u;
-  if(u.role==='branch'&&u.branchId)APP.active.branch=u.branchId;
+  if((u.role==='branch'||u.role==='entry')&&u.branchId)APP.active.branch=u.branchId;
   else APP.active.branch=APP.active.branch||'b1';
   syncDB();saveAPP();return true;
 }
 function logout(){APP.session.userId=null;USER=null;if(typeof CLOUD!=='undefined')CLOUD.on=false;if(!cloudConfigured())saveAPP();showLogin();}
 function isSuper(){return USER&&USER.role==='super';}
-function canEdit(){return USER&&(USER.role==='super'||USER.role==='branch');} // manager/super edit; entry cannot
+function canAllBranches(){return USER&&(USER.role==='super'||USER.role==='manager_all');} // can switch any branch
+function canDelete(){return USER&&(USER.role==='super'||USER.role==='manager_all');} // can delete shifts/digital days
+function canEdit(){return USER&&(USER.role==='super'||USER.role==='branch'||USER.role==='manager_all');} // super/area/branch edit; entry cannot
 function allowedPages(){return (USER&&USER.role!=='super'&&Array.isArray(USER.pages)&&USER.pages.length)?USER.pages:null;}
+function roleLabel(r){return r==='super'?t('super_admin'):r==='manager_all'?t('manager_all'):r==='entry'?t('data_entry'):t('branch_user');}
 function branchName(id){const b=APP.branches.find(x=>x.id===id);return b?b.name:id;}
 function setBranch(id){
-  if(!isSuper()&&USER.branchId!==id)return;
+  if(!canAllBranches()&&USER.branchId!==id)return;
   APP.active.branch=id;syncDB();saveAPP();
   ROUTE=ROUTE; renderNav(); render();
 }
@@ -926,7 +935,8 @@ async function cloudLogin(username,password){
 async function cloudLoadAll(user){
   const sb=CLOUD.sb;
   const {data:branches,error:be}=await sb.from('branches').select('*').order('id');if(be)throw be;
-  const visible = user.role==='super'?branches:branches.filter(b=>b.id===user.branch_id);
+  const allBr = user.role==='super'||user.role==='manager_all';
+  const visible = allBr?branches:branches.filter(b=>b.id===user.branch_id);
   APP.branches=visible.map(b=>({id:b.id,name:b.name}));
   const {data:sets}=await sb.from('settings').select('*');
   const setMap={};(sets||[]).forEach(s=>setMap[s.branch_id]=s);
@@ -951,7 +961,7 @@ async function cloudLoadAll(user){
     APP.users=(us||[]).map(u=>({id:u.id,username:u.username,password:u.password,role:u.role,branchId:u.branch_id,name:u.name,pages:u.pages||null}));
   } else APP.users=[];
   Object.keys(APP.data).forEach(bid=>APP.data[bid].shifts.sort((a,b)=>(a.date||'').localeCompare(b.date||'')));
-  APP.active.branch = user.role==='super'?(visible[0]?visible[0].id:'b1'):user.branch_id;
+  APP.active.branch = allBr?(visible[0]?visible[0].id:'b1'):user.branch_id;
   CLOUD.user={id:user.id,username:user.username,role:user.role,branchId:user.branch_id,name:user.name};
   CLOUD.on=true;
 }
@@ -1156,7 +1166,7 @@ VIEWS.inventory=function(){
     h+=`<div class="toolbar no-print">
       <div class="search">${icon('file')}<input placeholder="${t('search')}" value="${esc(invSearch)}" oninput="invSearch=this.value;render();focusEnd(this)"></div>
       <span class="spacer"></span>
-      <button class="btn btn-primary" onclick="editMove(-1)">${icon('upload')} ${t('add')}</button>
+      ${canEdit()?`<button class="btn btn-primary" onclick="editMove(-1)">${icon('upload')} ${t('add')}</button>`:''}
       <button class="btn" onclick="exportCSV('movements')">${t('export_csv')}</button>
       <button class="btn" onclick="window.print()">${t('print')}</button></div>`;
     h+=`<div class="card"><div class="tbl-wrap"><table><thead><tr>
@@ -1168,8 +1178,8 @@ VIEWS.inventory=function(){
         <td>${esc(m.item)}</td><td class="num">${esc(m.code)}</td>
         <td class="t-num num">${m['in']?fmt(m['in']):'—'}</td><td class="t-num num">${m.out?fmt(m.out):'—'}</td>
         <td class="t-num num">${fmt(m.balance)}</td>
-        <td class="no-print"><button class="btn btn-sm btn-ghost" onclick="editMove(${mv.indexOf(m)})">${t('edit')}</button>
-        <button class="btn btn-sm btn-ghost btn-danger" onclick="delMove(${mv.indexOf(m)})">${t('del')}</button></td></tr>`).join('')
+        <td class="no-print">${canEdit()?`<button class="btn btn-sm btn-ghost" onclick="editMove(${mv.indexOf(m)})">${t('edit')}</button>`:''}
+        ${canDelete()?`<button class="btn btn-sm btn-ghost btn-danger" onclick="delMove(${mv.indexOf(m)})">${t('del')}</button>`:''}</td></tr>`).join('')
         ||`<tr><td colspan="9" class="empty">${t('no_data')}</td></tr>`}
       </tbody><tfoot><tr><td colspan="5">${t('total')}</td>
       <td class="t-num num">${fmt(sum(rows,m=>m['in']))}</td><td class="t-num num">${fmt(sum(rows,m=>m.out))}</td><td></td><td class="no-print"></td></tr></tfoot>
@@ -1233,7 +1243,7 @@ function saveMove(i){
   if(i>=0)DB.movements[i]=Object.assign(DB.movements[i],rec);else DB.movements.push(rec);
   saveDB();closeModal();toast(t('saved'));render();
 }
-function delMove(i){if(!confirm(t('confirm_del')))return;DB.movements.splice(i,1);saveDB();toast(t('deleted'));render();}
+function delMove(i){if(!canDelete())return;if(!confirm(t('confirm_del')))return;DB.movements.splice(i,1);saveDB();toast(t('deleted'));render();}
 
 /* ---------------- SHIFTS (editable, localStorage) ---------------- */
 VIEWS.shifts=function(){
@@ -1995,8 +2005,8 @@ VIEWS.shifts=function(){
         <div style="font-size:12px;color:var(--txt2)">${esc(s.lead||'')}</div></div>
         <div class="no-print" style="display:flex;gap:4px">
           <button class="btn btn-sm btn-ghost" onclick="printShift(${idx})" title="${t('print')}">${icon('file')}</button>
-          ${canEdit()?`<button class="btn btn-sm btn-ghost" onclick="shiftForm(${idx})">${t('edit')}</button>
-          <button class="btn btn-sm btn-ghost btn-danger" onclick="delShift2(${idx})">${t('del')}</button>`:''}</div></div>
+          ${canEdit()?`<button class="btn btn-sm btn-ghost" onclick="shiftForm(${idx})">${t('edit')}</button>`:''}
+          ${canDelete()?`<button class="btn btn-sm btn-ghost btn-danger" onclick="delShift2(${idx})">${t('del')}</button>`:''}</div></div>
       <table style="margin-top:12px;font-size:12.5px">
         <tr><td style="border:none;padding:4px 0">${t('shift_total')}</td><td class="t-num num" style="border:none;padding:4px 0;font-weight:800">${money(c.salesTotal)}</td></tr>
         <tr><td style="border:none;padding:4px 0">${t('collections')}</td><td class="t-num num" style="border:none;padding:4px 0">${money(c.colTotal)}</td></tr>
@@ -2006,7 +2016,7 @@ VIEWS.shifts=function(){
   });
   return h+`</div>`;
 };
-function delShift2(i){if(!confirm(t('confirm_del')))return;const id=DB.shifts[i]&&DB.shifts[i]._id;DB.shifts.splice(i,1);saveDB();if(CLOUD.on)cloudDeleteShift(id);toast(t('deleted'));render();}
+function delShift2(i){if(!canDelete())return;if(!confirm(t('confirm_del')))return;const id=DB.shifts[i]&&DB.shifts[i]._id;DB.shifts.splice(i,1);saveDB();if(CLOUD.on)cloudDeleteShift(id);toast(t('deleted'));render();}
 
 /* ---------- entry form ---------- */
 let SHIDX=-1;
@@ -2311,7 +2321,7 @@ VIEWS.digital_mech=function(){
   if(!window._dig||window._digDate!==digDate)digDailyLoad();
   const dig=window._dig;
   const saved=digEntries().map(e=>e.date).sort().reverse();
-  const locked=!!digEntryFor(digDate)&&!isSuper();   // saved day → only super admin edits
+  const locked=!!digEntryFor(digDate)&&!canDelete();   // saved day → only super / area manager edits
   window._digLocked=locked;
   h+=`<div class="toolbar no-print">
     <div class="field" style="margin:0"><label style="display:none">d</label>
@@ -2320,6 +2330,7 @@ VIEWS.digital_mech=function(){
       <select onchange="digDate=this.value;digDailyLoad();render()"><option value="">— أيام مسجّلة —</option>${saved.map(d=>`<option value="${d}" ${d===digDate?'selected':''}>${fmtDate(d)}</option>`).join('')}</select></div>`:''}
     <span class="spacer"></span>
     ${locked?'':`<button class="btn btn-primary" onclick="saveDigital()">${icon('file')} ${t('save_digital')}</button>`}
+    ${(digEntryFor(digDate)&&canDelete())?`<button class="btn btn-ghost btn-danger" onclick="digDelDay()">${t('del')} ${t('daily_mode')}</button>`:''}
     <button class="btn" onclick="window.print()">${t('print')}</button></div>`;
   if(locked)h+=`<div class="note no-print" style="margin-bottom:14px">${icon('file')}<div>${t('dig_locked')}</div></div>`;
   if(!canEdit())h+=`<div class="note no-print" style="margin-bottom:14px">${icon('file')}<div>${t('digital_hidden')}</div></div>`;
@@ -2374,8 +2385,16 @@ function digSet(type,pi,ni,field,val){
   const nz=window._dig[type][pi].nozzles[ni];
   const el=document.getElementById(`dg_${type}_${pi}_${ni}`);if(el)el.textContent=fmt(Math.max(0,n(nz.today)-n(nz.yest)),0);
 }
+function digDelDay(){
+  if(!canDelete())return;
+  if(!confirm(t('del')+' '+fmtDate(digDate)+' ؟'))return;
+  DB.digitalEntries=digEntries().filter(e=>e.date!==digDate);
+  window._dig=null;
+  saveDB();if(CLOUD.on)cloudSettingsDebounced();
+  toast(t('deleted'));render();
+}
 function saveDigital(){
-  if(digEntryFor(digDate)&&!isSuper()){toast(t('dig_locked'),'err');return;}
+  if(digEntryFor(digDate)&&!canDelete()){toast(t('dig_locked'),'err');return;}
   const entries=digEntries();
   const i=entries.findIndex(e=>e.date===digDate);
   const rec={id:(i>=0?entries[i].id:genId()),date:digDate,digital:window._dig};
@@ -2649,43 +2668,75 @@ function saveMonth(){
    Each person has an account; shift expenses tagged to them
    post automatically, plus manual advances/repayments.
    ============================================================ */
-function partnerBalance(pid){
-  let take=0,repay=0;
-  (DB.shifts||[]).forEach(s=>(s.expenses||[]).forEach(e=>{if(e.partnerId===pid)take+=n(e.amount);}));
-  (DB.partnerTxns||[]).forEach(x=>{if(x.partnerId===pid){if(x.type==='repay')repay+=n(x.amount);else take+=n(x.amount);}});
+function partnerBalance(pid,ym){
+  let take=0,repay=0;const mok=d=>!ym||(d||'').slice(0,7)===ym;
+  (DB.shifts||[]).forEach(s=>(s.expenses||[]).forEach(e=>{if(e.partnerId===pid&&mok(s.date))take+=n(e.amount);}));
+  (DB.ledgerManual||[]).forEach(e=>{if(e.partnerId===pid&&e.kind==='expense'&&mok(e.date))take+=n(e.amount);});
+  (DB.partnerTxns||[]).forEach(x=>{if(x.partnerId===pid&&mok(x.date)){if(x.type==='repay')repay+=n(x.amount);else take+=n(x.amount);}});
   return {take,repay,balance:take-repay};
 }
-function partnerLedger(pid){
-  const rows=[];
+function partnerLedger(pid,ym){
+  const rows=[];const mok=d=>!ym||(d||'').slice(0,7)===ym;
   (DB.shifts||[]).forEach(s=>(s.expenses||[]).forEach(e=>{
-    if(e.partnerId===pid&&(e.label||e.amount))rows.push({date:s.date,desc:e.label||t('from_shift'),amount:n(e.amount),type:'take',src:'shift'});}));
-  (DB.partnerTxns||[]).forEach(x=>{if(x.partnerId===pid)rows.push({date:x.date,desc:x.desc,amount:n(x.amount),type:x.type,src:'manual',id:x.id});});
+    if(e.partnerId===pid&&(e.label||e.amount)&&mok(s.date))rows.push({date:s.date,desc:e.label||t('from_shift'),amount:n(e.amount),type:'take',src:'shift'});}));
+  (DB.ledgerManual||[]).forEach(e=>{
+    if(e.partnerId===pid&&e.kind==='expense'&&mok(e.date))rows.push({date:e.date,desc:e.label||t('entry_expense'),amount:n(e.amount),type:'take',src:'ledger'});});
+  (DB.partnerTxns||[]).forEach(x=>{if(x.partnerId===pid&&mok(x.date))rows.push({date:x.date,desc:x.desc,amount:n(x.amount),type:x.type,src:'manual',id:x.id});});
   rows.sort((a,b)=>(a.date||'').localeCompare(b.date||''));
   return rows;
 }
 
-let partnerOpen=null;
+function partnerMonths(){
+  const set={};
+  (DB.shifts||[]).forEach(s=>{if(s.date)set[s.date.slice(0,7)]=true;});
+  (DB.ledgerManual||[]).forEach(e=>{if(e.date)set[e.date.slice(0,7)]=true;});
+  (DB.partnerTxns||[]).forEach(x=>{if(x.date)set[x.date.slice(0,7)]=true;});
+  return Object.keys(set).sort().reverse();
+}
+let partnerOpen=null, partnerYM='';
 VIEWS.partners=function(){
   if(partnerOpen&&(DB.partners||[]).find(p=>p.id===partnerOpen))return partnerDetail(partnerOpen);
   partnerOpen=null;
   const ps=DB.partners||[];
-  let h=`<div class="toolbar no-print"><button class="btn btn-primary" onclick="editPartner(null)">${icon('wallet')} ${t('add_partner')}</button>
-    <span class="pill">${icon('truck')} ${esc(branchName(APP.active.branch))}</span></div>`;
+  const months=partnerMonths();
+  const ym=partnerYM&&months.includes(partnerYM)?partnerYM:'';
+  let h=`<div class="toolbar no-print">${canEdit()?`<button class="btn btn-primary" onclick="editPartner(null)">${icon('wallet')} ${t('add_partner')}</button>`:''}
+    <div class="field" style="margin:0;min-width:170px"><label style="display:none">m</label>
+      <select onchange="partnerYM=this.value;render()">
+        <option value="">${t('all_months')}</option>
+        ${months.map(m=>`<option value="${m}" ${m===ym?'selected':''}>${monthLabelAr(m)}</option>`).join('')}</select></div>
+    <span class="spacer"></span><span class="pill">${icon('truck')} ${esc(branchName(APP.active.branch))}</span>
+    <button class="btn" onclick="window.print()">${t('print')}</button></div>`;
   h+=`<div class="note no-print" style="margin-bottom:16px">${icon('file')}<div>${t('partner_note')}</div></div>`;
   if(!ps.length)return h+`<div class="card"><div class="empty">${icon('wallet')}<div>${t('no_data')}</div><div class="hint">${t('add_partner')}</div></div></div>`;
-  h+=`<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))">`;
-  ps.forEach(p=>{const b=partnerBalance(p.id);
+  // summary table (who took how much) — respects month filter
+  const sumRows=ps.map(p=>({p,b:partnerBalance(p.id,ym)}));
+  const totTake=sum(sumRows,r=>r.b.take),totRepay=sum(sumRows,r=>r.b.repay),totBal=sum(sumRows,r=>r.b.balance);
+  h+=printHead(t('partners')+(ym?(' — '+monthLabelAr(ym)):''));
+  h+=`<div class="card" style="margin-bottom:16px"><div class="card-head"><h3>${ym?(t('taken')+' — '+monthLabelAr(ym)):t('partners')}</h3></div>
+    <div class="tbl-wrap"><table><thead><tr><th>${t('person')}</th><th class="t-num">${t('taken')}</th>
+    <th class="t-num">${t('repaid')}</th><th class="t-num">${t('balance_due')}</th><th class="no-print"></th></tr></thead><tbody>
+    ${sumRows.map(({p,b})=>`<tr><td class="h">${esc(p.name)}</td>
+      <td class="t-num num neg">${money(b.take)}</td><td class="t-num num pos">${money(b.repay)}</td>
+      <td class="t-num num" style="font-weight:700;color:${b.balance>0?'var(--red)':'var(--green)'}">${money(b.balance)}</td>
+      <td class="no-print"><button class="btn btn-sm btn-ghost" onclick="openPartner('${p.id}')">${t('open_account')} →</button></td></tr>`).join('')}
+    </tbody><tfoot><tr><td>${t('total')}</td><td class="t-num num">${money(totTake)}</td>
+    <td class="t-num num">${money(totRepay)}</td><td class="t-num num">${money(totBal)}</td><td class="no-print"></td></tr></tfoot></table></div></div>`;
+  // cards (overall balance, not month-filtered)
+  h+=`<div class="grid no-print" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))">`;
+  ps.forEach(p=>{const b=partnerBalance(p.id);const bm=partnerBalance(p.id,ym);
     h+=`<div class="card card-pad">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
         <div style="font-weight:800;font-size:16px">${esc(p.name)}</div>
         <div class="no-print" style="display:flex;gap:4px">
-          <button class="btn btn-sm btn-ghost" onclick="editPartner('${p.id}')">${t('edit')}</button>
-          <button class="btn btn-sm btn-ghost btn-danger" onclick="delPartner('${p.id}')">${t('del')}</button></div></div>
+          ${canEdit()?`<button class="btn btn-sm btn-ghost" onclick="editPartner('${p.id}')">${t('edit')}</button>`:''}
+          ${canDelete()?`<button class="btn btn-sm btn-ghost btn-danger" onclick="delPartner('${p.id}')">${t('del')}</button>`:''}</div></div>
       <div style="margin:14px 0;padding:14px;border-radius:12px;background:var(--panel2);text-align:center">
         <div style="font-size:11.5px;color:var(--txt2);font-weight:600">${t('balance_due')}</div>
         <div class="num" style="font-size:24px;font-weight:800;color:${b.balance>0?'var(--red)':'var(--green)'}">${money(b.balance)}</div></div>
-      <table style="font-size:12.5px;width:100%"><tr><td style="border:none;padding:3px 0">${t('taken')}</td><td class="t-num num" style="border:none;padding:3px 0">${money(b.take)}</td></tr>
-        <tr><td style="border:none;padding:3px 0">${t('repaid')}</td><td class="t-num num" style="border:none;padding:3px 0">${money(b.repaid)}</td></tr></table>
+      <table style="font-size:12.5px;width:100%">
+        <tr><td style="border:none;padding:3px 0">${t('taken')}${ym?(' ('+monthLabelAr(ym)+')'):''}</td><td class="t-num num" style="border:none;padding:3px 0">${money(ym?bm.take:b.take)}</td></tr>
+        <tr><td style="border:none;padding:3px 0">${t('repaid')}</td><td class="t-num num" style="border:none;padding:3px 0">${money(b.repay)}</td></tr></table>
       <button class="btn no-print" style="width:100%;justify-content:center;margin-top:12px" onclick="openPartner('${p.id}')">${t('open_account')} →</button></div>`;
   });
   return h+`</div>`;
@@ -2704,22 +2755,29 @@ function savePartner(id){
   else DB.partners.push({id:genId(),name});
   saveDB();if(CLOUD.on)cloudSaveSettings(APP.active.branch,branchSettings());closeModal();toast(t('saved'));render();
 }
-function delPartner(id){if(!confirm(t('confirm_del')))return;
+function delPartner(id){if(!canDelete())return;if(!confirm(t('confirm_del')))return;
   DB.partners=DB.partners.filter(x=>x.id!==id);
   DB.partnerTxns=(DB.partnerTxns||[]).filter(x=>x.partnerId!==id);
   saveDB();if(CLOUD.on)cloudSaveSettings(APP.active.branch,branchSettings());toast(t('deleted'));render();}
 
 function partnerDetail(pid){
   const p=(DB.partners||[]).find(x=>x.id===pid);if(!p){partnerOpen=null;return render(),'';}
-  const b=partnerBalance(pid);const rows=partnerLedger(pid);
+  const months=partnerMonths();
+  const ym=partnerYM&&months.includes(partnerYM)?partnerYM:'';
+  const b=partnerBalance(pid,ym);const rows=partnerLedger(pid,ym);
+  const bAll=partnerBalance(pid);
   let h=`<div class="toolbar no-print"><button class="btn btn-ghost" onclick="partnerOpen=null;render()">← ${t('partners')}</button>
-    <span class="spacer"></span><button class="btn btn-primary" onclick="addPartnerTxn('${pid}')">${t('add_txn')}</button>
+    <div class="field" style="margin:0;min-width:170px"><label style="display:none">m</label>
+      <select onchange="partnerYM=this.value;render()">
+        <option value="">${t('all_months')}</option>
+        ${months.map(m=>`<option value="${m}" ${m===ym?'selected':''}>${monthLabelAr(m)}</option>`).join('')}</select></div>
+    <span class="spacer"></span>${canEdit()?`<button class="btn btn-primary" onclick="addPartnerTxn('${pid}')">${t('add_txn')}</button>`:''}
     <button class="btn" onclick="window.print()">${t('print')}</button></div>`;
-  h+=printHead(t('account')+' — '+p.name);
+  h+=printHead(t('account')+' — '+p.name+(ym?(' — '+monthLabelAr(ym)):''));
   h+=`<div class="grid kpis">
-    ${kpi(t('taken'),money(b.take),'wallet','ic-r')}
-    ${kpi(t('repaid'),money(b.repaid),'card','ic-g')}
-    ${kpi(t('balance_due'),money(b.balance),'award',b.balance>0?'ic-r':'ic-g')}
+    ${kpi(t('taken')+(ym?(' ('+monthLabelAr(ym)+')'):''),money(b.take),'wallet','ic-r')}
+    ${kpi(t('repaid'),money(b.repay),'card','ic-g')}
+    ${kpi(t('balance_due')+' ('+t('all_months')+')',money(bAll.balance),'award',bAll.balance>0?'ic-r':'ic-g')}
   </div>`;
   let run=0;
   h+=`<div class="card" style="margin-top:16px"><div class="card-head"><h3>${esc(p.name)}</h3></div>
@@ -2730,7 +2788,7 @@ function partnerDetail(pid){
         <td><span class="tag ${r.type==='repay'?'tag-in':'tag-out'}">${r.type==='repay'?t('repay'):t('take_adv')}</span>${r.src==='shift'?` <span class="badge">${t('from_shift')}</span>`:''}</td>
         <td class="t-num num ${r.type==='repay'?'pos':'neg'}">${r.type==='repay'?'−':'+'}${fmt(r.amount)}</td>
         <td class="t-num num">${fmt(run)}</td>
-        <td class="no-print">${r.src==='manual'?`<button class="btn btn-sm btn-ghost btn-danger" onclick="delPartnerTxn('${r.id}')">${t('del')}</button>`:''}</td></tr>`;}).join('')
+        <td class="no-print">${(r.src==='manual'&&canDelete())?`<button class="btn btn-sm btn-ghost btn-danger" onclick="delPartnerTxn('${r.id}')">${t('del')}</button>`:''}</td></tr>`;}).join('')
       ||`<tr><td colspan="6" class="empty">${t('no_data')}</td></tr>`}
     </tbody><tfoot><tr><td colspan="4">${t('balance_due')}</td><td class="t-num num">${fmt(b.balance)}</td><td class="no-print"></td></tr></tfoot></table></div></div>`;
   return h;
@@ -2754,7 +2812,7 @@ function savePartnerTxn(pid){
   DB.partnerTxns=DB.partnerTxns||[];DB.partnerTxns.push(rec);
   saveDB();if(CLOUD.on)cloudSaveSettings(APP.active.branch,branchSettings());closeModal();toast(t('saved'));render();
 }
-function delPartnerTxn(id){if(!confirm(t('confirm_del')))return;
+function delPartnerTxn(id){if(!canDelete())return;if(!confirm(t('confirm_del')))return;
   DB.partnerTxns=(DB.partnerTxns||[]).filter(x=>x.id!==id);
   saveDB();if(CLOUD.on)cloudSaveSettings(APP.active.branch,branchSettings());toast(t('deleted'));render();}
 
@@ -2765,9 +2823,11 @@ function delPartnerTxn(id){if(!confirm(t('confirm_del')))return;
 function openingStock(){const s=branchSettings();if(!s.openingStock)s.openingStock={p92:'',p95:'',solar:''};return s.openingStock;}
 
 function ledgerManual(){ if(!DB.ledgerManual)DB.ledgerManual=[]; return DB.ledgerManual; }
-function ledgerRows(ym){
+function ledgerRows(key){
+  // key = 'YYYY-MM' (month) or 'YYYY-MM-DD' (single day) — prefix match
+  const match=d=>(d||'').startsWith(key);
   const rows=[];
-  (DB.shifts||[]).filter(s=>(s.date||'').slice(0,7)===ym)
+  (DB.shifts||[]).filter(s=>match(s.date))
     .sort((a,b)=>(a.date||'').localeCompare(b.date||'')).forEach(s=>{
     const c=computeShift(s);const col=s.collections||{};const ct=s.collTimes||{};
     const addI=(amt,label,note)=>{if(n(amt))rows.push({date:s.date,income:n(amt),label,note:note||''});};
@@ -2781,8 +2841,9 @@ function ledgerRows(ym){
       rows.push({date:s.date,expense:n(e.amount),label:e.label,note:[pn,e.time].filter(Boolean).join(' · ')});}});
   });
   // manual entries (recorded directly on this page)
-  ledgerManual().filter(e=>(e.date||'').slice(0,7)===ym).forEach(e=>{
-    const r={date:e.date,label:e.label,note:e.note||'',manual:true,id:e.id};
+  ledgerManual().filter(e=>match(e.date)).forEach(e=>{
+    const pn=e.partnerId?((DB.partners||[]).find(x=>x.id===e.partnerId)||{}).name:'';
+    const r={date:e.date,label:e.label,note:[pn,e.note].filter(Boolean).join(' · '),manual:true,id:e.id};
     if(e.kind==='income')r.income=n(e.amount);else r.expense=n(e.amount);
     rows.push(r);
   });
@@ -2790,7 +2851,7 @@ function ledgerRows(ym){
   return rows;
 }
 
-let ieYM=null;
+let ieYM=null, ieMode='month', ieDay=null;
 function ieMonths(){
   const set={};
   (DB.shifts||[]).forEach(s=>{if(s.date)set[s.date.slice(0,7)]=true;});
@@ -2802,17 +2863,24 @@ function ieMonths(){
 }
 VIEWS.income_expense=function(){
   const months=ieMonths();
-  let h=printHead(t('income_expense'));
+  if(!ieDay)ieDay=new Date().toISOString().slice(0,10);
+  let h=printHead(t('income_expense')+(ieMode==='day'?(' — '+fmtDate(ieDay)):''));
   h+=`<div class="note no-print" style="margin-bottom:14px">${icon('card')}<div>${t('ie_note')}</div></div>`;
   if(ieYM===null||!months.includes(ieYM))ieYM=months[0];
+  h+=`<div class="seg no-print" style="margin-bottom:12px">
+    <button class="${ieMode==='month'?'on':''}" onclick="ieMode='month';render()">${t('month_total')}</button>
+    <button class="${ieMode==='day'?'on':''}" onclick="ieMode='day';render()">${t('daily_mode')}</button></div>`;
   h+=`<div class="toolbar no-print"><span class="pill">${icon('truck')} ${esc(branchName(APP.active.branch))}</span>
-    <div class="field" style="margin:0;min-width:180px"><label style="display:none">m</label>
-    <select onchange="ieYM=this.value;render()">${months.map(m=>`<option value="${m}" ${m===ieYM?'selected':''}>${monthLabelAr(m)}</option>`).join('')}</select></div>
+    ${ieMode==='month'
+      ?`<div class="field" style="margin:0;min-width:180px"><label style="display:none">m</label>
+        <select onchange="ieYM=this.value;render()">${months.map(m=>`<option value="${m}" ${m===ieYM?'selected':''}>${monthLabelAr(m)}</option>`).join('')}</select></div>`
+      :`<div class="field" style="margin:0"><label style="display:none">d</label>
+        <input type="date" value="${esc(ieDay)}" oninput="ieDay=this.value;render()"></div>`}
     <span class="spacer"></span>
     ${canEdit()?`<button class="btn btn-primary" onclick="ieEntryForm()">${icon('card')} ${t('add_entry')}</button>`:''}
     <button class="btn" onclick="exportCSV('ledger')">${t('export_csv')}</button>
-    <button class="btn" onclick="window.print()">${icon('file')} ${t('print')}</button></div>`;
-  const rows=ledgerRows(ieYM);
+    <button class="btn" onclick="window.print()">${icon('file')} ${ieMode==='day'?t('print_day'):t('print')}</button></div>`;
+  const rows=ledgerRows(ieMode==='day'?ieDay:ieYM);
   const totI=sum(rows,r=>r.income),totE=sum(rows,r=>r.expense);
   h+=`<div class="grid kpis">
     ${kpi(t('total_income'),money(totI),'trending','ic-g')}
@@ -2829,14 +2897,14 @@ VIEWS.income_expense=function(){
       <td class="t-num num ${r.expense?'neg':''}">${r.expense?fmt(r.expense):''}</td>
       <td>${esc(r.label)}${r.manual?` <span class="pill" style="font-size:10px;padding:1px 6px">${t('manual_tag')}</span>`:''}</td>
       <td style="color:var(--txt2);font-size:12px">${esc(r.note)}</td>
-      <td class="no-print">${r.manual&&canEdit()?`<button class="btn btn-sm btn-ghost btn-danger" onclick="ieDel('${r.id}')">${t('del')}</button>`:''}</td></tr>`;}).join('')
+      <td class="no-print">${r.manual&&canDelete()?`<button class="btn btn-sm btn-ghost btn-danger" onclick="ieDel('${r.id}')">${t('del')}</button>`:''}</td></tr>`;}).join('')
       ||`<tr><td colspan="6" class="empty">${t('no_data')}</td></tr>`}
     </tbody><tfoot><tr><td>${t('total')}</td><td class="t-num num pos">${fmt(totI)}</td>
     <td class="t-num num neg">${fmt(totE)}</td><td colspan="3"></td></tr></tfoot></table></div></div>`;
   return h;
 };
 function ieEntryForm(){
-  const d=new Date().toISOString().slice(0,10);
+  const d=(ieMode==='day'&&ieDay)?ieDay:new Date().toISOString().slice(0,10);
   modal(t('add_entry'),
     `<div class="form-grid">
       <div class="field"><label>${t('date')}</label><input id="ie_date" type="date" value="${d}"></div>
@@ -2845,6 +2913,10 @@ function ieEntryForm(){
       <div class="field"><label>${t('amount')}</label><input id="ie_amt" type="number" step="any" placeholder="0"></div>
     </div>
     <div class="field"><label>${t('label')}</label><input id="ie_label" placeholder="${t('expense_line')}"></div>
+    <div class="field"><label>${t('person')} (${t('optional')})</label><select id="ie_partner">
+      <option value="">${t('other_none')}</option>
+      ${(DB.partners||[]).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select>
+      <div class="hint" style="margin-top:4px">${t('ie_partner_hint')}</div></div>
     <div class="field"><label>${t('notes')}</label><input id="ie_note"></div>`,
     `<button class="btn btn-ghost" onclick="closeModal()">${t('cancel')}</button>
      <button class="btn btn-primary" onclick="ieSave()">${t('save')}</button>`);
@@ -2853,12 +2925,13 @@ function ieSave(){
   const g=id=>document.getElementById(id).value;
   const amt=g('ie_amt');
   if(amt===''||!n(amt)){toast(t('amount')+' ؟','err');return;}
-  const rec={id:genId(),date:g('ie_date'),kind:g('ie_kind'),amount:n(amt),label:g('ie_label')||(g('ie_kind')==='income'?t('entry_income'):t('entry_expense')),note:g('ie_note')};
+  const rec={id:genId(),date:g('ie_date'),kind:g('ie_kind'),amount:n(amt),label:g('ie_label')||(g('ie_kind')==='income'?t('entry_income'):t('entry_expense')),partnerId:g('ie_partner')||'',note:g('ie_note')};
   ledgerManual().push(rec);
   saveDB();if(CLOUD.on)cloudSettingsDebounced();
   closeModal();toast(t('saved'));render();
 }
 function ieDel(id){
+  if(!canDelete())return;
   if(!confirm(t('del_confirm')))return;
   DB.ledgerManual=ledgerManual().filter(e=>e.id!==id);
   saveDB();if(CLOUD.on)cloudSettingsDebounced();
@@ -2898,7 +2971,6 @@ function showLogin(){
     <div class="field"><label>${t('password')}</label><input id="li_pass" type="password" autocomplete="current-password"></div>
     <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:6px" type="submit">${t('login')}</button>
     <div class="login-hint">${cloudConfigured()?'':t('login_hint')}</div>
-    <div style="text-align:center;margin-top:14px"><button type="button" class="btn btn-ghost btn-sm" onclick="cloudSetupModal()">${icon('truck')} ${t('cloud_setup')}</button></div>
   </form>`;
   document.documentElement.setAttribute('data-theme',THEME);
   document.documentElement.dir=LANG==='ar'?'rtl':'ltr';document.body.dir=document.documentElement.dir;
@@ -2940,15 +3012,15 @@ VIEWS.users=function(){
     <th>${t('full_name')}</th><th>${t('username')}</th><th>${t('password')}</th><th>${t('role')}</th><th>${t('branch')}</th><th class="no-print"></th></tr></thead><tbody>
     ${APP.users.map(u=>`<tr><td>${esc(u.name||'—')}</td><td class="num">${esc(u.username)}</td>
       <td class="num">${'•'.repeat(Math.min(8,(u.password||'').length))}</td>
-      <td><span class="role-badge">${u.role==='super'?t('super_admin'):u.role==='entry'?t('data_entry'):t('branch_user')}</span></td>
-      <td>${u.role==='super'?t('all_branches'):esc(branchName(u.branchId))}${(Array.isArray(u.pages)&&u.pages.length)?` <span class="badge">${u.pages.length} صفحة</span>`:''}</td>
+      <td><span class="role-badge">${roleLabel(u.role)}</span></td>
+      <td>${(u.role==='super'||u.role==='manager_all')?t('all_branches'):esc(branchName(u.branchId))}${(Array.isArray(u.pages)&&u.pages.length)?` <span class="badge">${u.pages.length} صفحة</span>`:''}</td>
       <td class="no-print"><button class="btn btn-sm btn-ghost" onclick="editUser('${u.id}')">${t('edit')}</button>
       ${(u.id===(USER&&USER.id))?'':`<button class="btn btn-sm btn-ghost btn-danger" onclick="rmUser('${u.id}')">${t('del')}</button>`}</td></tr>`).join('')}
     </tbody></table></div></div>`;
   h+=`<div class="note no-print" style="margin-top:16px">${icon('file')}<div>${t('disclaimer')}</div></div>`;
   return h;
 };
-const PAGE_LIST=[['dashboard'],['inventory'],['shifts'],['tanks'],['images'],['income_expense'],['monthly'],['commission'],['channels'],['supplier'],['partners'],['reports'],['importexport']];
+const PAGE_LIST=[['dashboard'],['inventory'],['shifts'],['digital_mech'],['income_expense'],['monthly'],['partners'],['reports']];
 function editUser(id){
   const u=id?APP.users.find(x=>x.id===id):{name:'',username:'',password:'',role:'branch',branchId:'b1',pages:null};
   const pages=Array.isArray(u.pages)?u.pages:null;
@@ -2961,11 +3033,14 @@ function editUser(id){
     <div class="field"><label>${t('role')}</label><select id="u_role" onchange="uRoleChange(this.value)">
       <option value="branch" ${u.role==='branch'?'selected':''}>${t('branch_user')}</option>
       <option value="entry" ${u.role==='entry'?'selected':''}>${t('data_entry')}</option>
+      <option value="manager_all" ${u.role==='manager_all'?'selected':''}>${t('manager_all')}</option>
       <option value="super" ${u.role==='super'?'selected':''}>${t('super_admin')}</option></select></div>
-    <div class="field" id="u_branch_wrap" style="${u.role==='super'?'display:none':''}"><label>${t('branch')}</label>
+    <div class="field" id="u_branch_wrap" style="${(u.role==='super'||u.role==='manager_all')?'display:none':''}"><label>${t('branch')}</label>
       <select id="u_branch">${APP.branches.map(b=>`<option value="${b.id}" ${b.id===u.branchId?'selected':''}>${esc(b.name)}</option>`).join('')}</select></div>
     </div>
     <div id="u_pages_wrap" style="${u.role==='super'?'display:none':''}">
+      <!-- manager_all keeps page control -->
+
       <div class="field" style="margin-bottom:6px"><label>${t('allowed_pages')}</label>
         <div class="hint" style="margin-bottom:8px">${t('all_pages')} — سيب الكل فاضي = كل الصفحات</div>
         <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:4px 12px">
@@ -2979,7 +3054,7 @@ function editUser(id){
      <button class="btn btn-primary" onclick="saveUser(${id?`'${id}'`:'null'})">${t('save')}</button>`);
 }
 function uRoleChange(v){
-  document.getElementById('u_branch_wrap').style.display=v==='super'?'none':'';
+  document.getElementById('u_branch_wrap').style.display=(v==='super'||v==='manager_all')?'none':'';
   document.getElementById('u_pages_wrap').style.display=v==='super'?'none':'';
 }
 function saveUser(id){
@@ -2987,7 +3062,7 @@ function saveUser(id){
   const role=g('u_role');
   const pages=role==='super'?null:Array.from(document.querySelectorAll('.u_page:checked')).map(c=>c.value);
   const rec={name:g('u_name'),username:g('u_user').trim(),password:g('u_pass'),role,
-    branchId:role==='super'?null:g('u_branch'), pages:(pages&&pages.length)?pages:null};
+    branchId:(role==='super'||role==='manager_all')?null:g('u_branch'), pages:(pages&&pages.length)?pages:null};
   if(!rec.username||!rec.password){toast(t('login_err'),'err');return;}
   if(APP.users.some(x=>x.username===rec.username&&x.id!==id)){toast(t('username')+' !','err');return;}
   if(CLOUD.on){
