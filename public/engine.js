@@ -22,8 +22,22 @@ const DICT = {
   dashboard_sub:{ar:'نظرة عامة على أداء المحطة',en:'Overview of station performance'},
   inventory:{ar:'المخزون والأصناف',en:'Inventory & Items'},
   inventory_sub:{ar:'كارت الصنف وحركة الوارد والمنصرف',en:'Item cards, incoming & outgoing movements'},
-  shifts:{ar:'تقفيل الورديات',en:'Shift Closings'},
-  shifts_sub:{ar:'تقفيل الوردية اليومي والخزينة',en:'Daily shift closing & cash reconciliation'},
+  shifts:{ar:'تقفيل وردية ميكانيكي',en:'Shift Closing — Mechanical'},
+  shifts_sub:{ar:'تقفيل الوردية اليومي بالعدّاد الميكانيكي والخزينة',en:'Daily mechanical shift closing & cash'},
+  shifts_digital:{ar:'تقفيل وردية ديجيتال',en:'Shift Closing — Digital'},
+  shifts_digital_sub:{ar:'نفس التقفيل بقراءة العدّاد الرقمي',en:'Same closing with the digital meter reading'},
+  calib:{ar:'العيار',en:'Calibration'},
+  calib_total:{ar:'إجمالي العيارات',en:'Total calibration'},
+  net_liters:{ar:'الصافي',en:'Net'},
+  net_after_calib:{ar:'بعد خصم العيار',en:'after calibration'},
+  item_name:{ar:'الصنف',en:'Item'},
+  deposit_ext:{ar:'إيداع خارجي',en:'External Deposit'},
+  withdraw_cash:{ar:'سحب',en:'Withdrawal'},
+  from_settings:{ar:'من الإعدادات',en:'from settings'},
+  companies_title:{ar:'شركات التحصيل',en:'Collection Companies'},
+  companies_note:{ar:'الشركات دي بتظهر في خانة التحصيل في تقفيل الوردية. تقدر تضيف/تعدّل/تمسح، وكل فرع ليه شركاته.',en:'These appear in the collections box of the shift closing. Add/edit/remove — each branch has its own.'},
+  company_name:{ar:'اسم الشركة',en:'Company name'},
+  add_company:{ar:'إضافة شركة',en:'Add company'},
   monthly:{ar:'التقفيل الشهري',en:'Monthly Closing'},
   monthly_sub:{ar:'الأرباح والمصروفات ورأس المال',en:'Profit, expenses & capital'},
   tanks:{ar:'جرد التنكات',en:'Tank Reconciliation'},
@@ -278,7 +292,8 @@ const DICT = {
   branches_title:{ar:'إدارة الفروع (المدير العام)',en:'Branches (super admin)'},
   // digital & mechanical
   digital_mech:{ar:'ديجيتال & ميكانيكي',en:'Digital & Mechanical'},
-  digital_mech_sub:{ar:'قراءات العدّادات الرقمية ومقارنتها بالميكانيكي',en:'Digital meter readings vs mechanical'},
+  digital_mech_sub:{ar:'مقارنة لترات تقفيل الديجيتال بتقفيل الميكانيكي',en:'Compares digital vs mechanical closing liters'},
+  cmp_note:{ar:'المقارنة بتجمع لترات «تقفيل وردية ديجيتال» و«تقفيل وردية ميكانيكي» لنفس اليوم/الشهر وتطرح الفرق.',en:'Compares the net liters of the digital and mechanical shift closings.'},
   digital:{ar:'ديجيتال',en:'Digital'},
   mechanical:{ar:'ميكانيكي',en:'Mechanical'},
   nozzle:{ar:'عداد',en:'Nozzle'},
@@ -475,7 +490,7 @@ function closeModal(){document.getElementById('modalRoot').innerHTML='';}
 /* ---------- navigation ---------- */
 const NAV=[
   {g:'g_main',items:[['dashboard','grid']]},
-  {g:'g_ops',items:[['inventory','box'],['shifts','clock'],['digital_mech','grid']]},
+  {g:'g_ops',items:[['inventory','box'],['shifts','clock'],['shifts_digital','clock'],['digital_mech','grid']]},
   {g:'g_fin',items:[['income_expense','card'],['monthly','trending'],['partners','wallet']]},
   {g:'g_sys',items:[['reports','file'],['users','users'],['settings','gear']]},
 ];
@@ -620,12 +635,22 @@ const APP_KEY='farouk_app_v4';   // bumped → applies real branch names, starts
 const BRANCH_NAMES=['صقر (الرئيسي)','السلام','ادكو','مرغم اسكندريه','مهندسين','الساحل'];
 const BRANCH_COUNT=BRANCH_NAMES.length;
 
+function defaultCompanies(){
+  return [{id:'bank',name:'بنك'},{id:'petroapp',name:'بترو أب'},{id:'octane',name:'أوكتين'},{id:'petropay',name:'بترو باي'}];
+}
 function defaultSettings(){
   return {prices:{p92:22.25,p95:24,solar:20.5}, commission:{benzeneRate:0.5143,solarRate:0.358},
     egpc:{p92:0.5503,p95:0.671,solar:0.3811,percent:0.30,tax:0.02},
     openingStock:{p92:'',p95:'',solar:''},
     channelOpening:{bank:'',petroapp:'',octane:'',petropay:''},
+    companies:defaultCompanies(),
     supplierName:'أولى إنرجي', supplierOpening:''};
+}
+// collection companies for the active branch (customizable, per-branch)
+function collectionCompanies(){
+  const s=branchSettings();
+  if(!Array.isArray(s.companies)||!s.companies.length)s.companies=defaultCompanies();
+  return s.companies;
 }
 function egpcSettings(){const s=branchSettings();if(!s.egpc)s.egpc={p92:0.5503,p95:0.671,solar:0.3811,percent:0.30,tax:0.02};return s.egpc;}
 function emptyBranch(){
@@ -638,7 +663,7 @@ function emptyBranch(){
     settings:defaultSettings(),
     partners:[], partnerTxns:[],
     channelManual:[], supplierEntries:[], digitalEntries:[], ledgerManual:[],
-    shifts:[], monthlyEntries:[], images:[]
+    shifts:[], shiftsDigital:[], monthlyEntries:[], images:[]
   };
 }
 function seedBranch1(){
@@ -774,6 +799,7 @@ alter table public.settings add column if not exists channel_manual  jsonb not n
 alter table public.settings add column if not exists supplier_entries jsonb not null default '[]';
 alter table public.settings add column if not exists digital_entries  jsonb not null default '[]';
 alter table public.settings add column if not exists ledger_manual    jsonb not null default '[]';
+alter table public.settings add column if not exists companies        jsonb not null default '[{"id":"bank","name":"بنك"},{"id":"petroapp","name":"بترو أب"},{"id":"octane","name":"أوكتين"},{"id":"petropay","name":"بترو باي"}]';
 alter table public.settings add column if not exists supplier_name  text default 'أولى إنرجي';
 alter table public.settings add column if not exists supplier_opening numeric default 0;
 
@@ -943,14 +969,14 @@ async function cloudLoadAll(user){
   APP.data={};
   visible.forEach(b=>{const d=emptyBranch();const st=setMap[b.id];
     if(st){d.settings={prices:st.prices,commission:st.commission,egpc:st.egpc||undefined,openingStock:st.opening_stock||undefined,
-        channelOpening:st.channel_opening||undefined,supplierName:st.supplier_name||'أولى إنرجي',supplierOpening:st.supplier_opening||''};
+        channelOpening:st.channel_opening||undefined,companies:(st.companies&&st.companies.length?st.companies:defaultCompanies()),supplierName:st.supplier_name||'أولى إنرجي',supplierOpening:st.supplier_opening||''};
       d.partners=st.partners||[];d.partnerTxns=st.partner_txns||[];
       d.channelManual=st.channel_manual||[];d.supplierEntries=st.supplier_entries||[];d.digitalEntries=st.digital_entries||[];d.ledgerManual=st.ledger_manual||[];}
     APP.data[b.id]=d;});
   const ids=visible.map(b=>b.id);
   if(ids.length){
     const {data:shifts}=await sb.from('shifts').select('*').in('branch_id',ids);
-    (shifts||[]).forEach(r=>{const d=APP.data[r.branch_id];if(d){const o=r.data||{};o._id=r.id;d.shifts.push(o);}});
+    (shifts||[]).forEach(r=>{const d=APP.data[r.branch_id];if(d){const o=r.data||{};o._id=r.id;if(o.kind==='digital'){(d.shiftsDigital||(d.shiftsDigital=[])).push(o);}else d.shifts.push(o);}});
     const {data:mon}=await sb.from('monthly_entries').select('*').in('branch_id',ids);
     (mon||[]).forEach(r=>{const d=APP.data[r.branch_id];if(d){const o=r.data||{};o._id=r.id;d.monthlyEntries.push(o);}});
     const {data:imgs}=await sb.from('images').select('*').in('branch_id',ids);
@@ -975,7 +1001,7 @@ async function cloudSaveMonthly(branchId,m){try{if(!m._id)m._id=genId();
 async function cloudSaveSettings(branchId,s){try{
   const d=APP.data[branchId]||{};
   await CLOUD.sb.from('settings').upsert({branch_id:branchId,prices:s.prices,commission:s.commission,egpc:s.egpc||null,
-    opening_stock:s.openingStock||null,channel_opening:s.channelOpening||{},supplier_name:s.supplierName||'أولى إنرجي',
+    opening_stock:s.openingStock||null,channel_opening:s.channelOpening||{},companies:s.companies||defaultCompanies(),supplier_name:s.supplierName||'أولى إنرجي',
     supplier_opening:n(s.supplierOpening)||0,channel_manual:d.channelManual||[],supplier_entries:d.supplierEntries||[],digital_entries:d.digitalEntries||[],ledger_manual:d.ledgerManual||[],
     partners:d.partners||[],partner_txns:d.partnerTxns||[],updated_at:new Date().toISOString()});
 }catch(e){cloudErr(e);}}
@@ -1692,6 +1718,15 @@ VIEWS.settings=function(){
         ${APP.branches.map(b=>`<div class="field"><label>${esc(b.id)}</label><input value="${esc(b.name)}" oninput="renameBranchUI('${b.id}',this.value)"></div>`).join('')}
       </div></div>`;
     h+=`<div class="card card-pad" style="margin-top:16px;border-color:var(--brand)">
+      <div class="sect-head" style="margin-top:0"><h3>${t('companies_title')} — <span style="color:var(--brand2)">${esc(branchName(APP.active.branch))}</span></h3></div>
+      <div class="note" style="margin-bottom:14px;border-inline-start-color:var(--brand2)">${icon('card')}<div>${t('companies_note')}</div></div>
+      <table class="form-tbl"><thead><tr><th>${t('company_name')}</th><th class="no-print"></th></tr></thead><tbody>
+        ${collectionCompanies().map(co=>`<tr>
+          <td><input class="side-in" style="text-align:start" value="${esc(co.name)}" oninput="renameCompany('${co.id}',this.value)"></td>
+          <td class="no-print"><button class="btn btn-sm btn-ghost btn-danger" onclick="delCompany('${co.id}')">${t('del')}</button></td></tr>`).join('')}
+      </tbody></table>
+      <button class="btn btn-primary" style="margin-top:12px" onclick="addCompany()">${icon('card')} ${t('add_company')}</button></div>`;
+    h+=`<div class="card card-pad" style="margin-top:16px;border-color:var(--brand)">
       <div class="sect-head" style="margin-top:0"><h3>${t('cloud_setup')}</h3></div>
       <div class="note" style="margin-bottom:14px;border-inline-start-color:${(typeof CLOUD!=='undefined'&&CLOUD.on)?'var(--green)':'var(--amber)'}">${icon('truck')}<div>
         ${(typeof CLOUD!=='undefined'&&CLOUD.on)?('<b>'+t('cloud_mode')+'</b> — '+esc((CLOUD.cfg&&CLOUD.cfg.url)||'')):('<b>'+t('local_mode')+'</b> — '+t('cloud_intro'))}</div></div>
@@ -1730,6 +1765,22 @@ VIEWS.settings=function(){
 let _setTimer=null;
 function setPrice(k,v){branchSettings().prices[k]=n(v);saveDB();cloudSettingsDebounced();}
 function setComm(k,v){branchSettings().commission[k]=n(v);saveDB();cloudSettingsDebounced();}
+/* ---- collection companies (per branch) ---- */
+function addCompany(){
+  const list=collectionCompanies();
+  const id='co'+Date.now().toString(36);
+  list.push({id,name:(LANG==='ar'?'شركة جديدة':'New company')});
+  saveDB();if(CLOUD.on)cloudSettingsDebounced();render();
+}
+function renameCompany(id,name){
+  const co=collectionCompanies().find(x=>x.id===id);if(co){co.name=name;saveDB();clearTimeout(window._coTimer);if(CLOUD.on)window._coTimer=setTimeout(()=>cloudSettingsDebounced(),500);}
+}
+function delCompany(id){
+  if(!confirm(t('confirm_del')))return;
+  const s=branchSettings();s.companies=collectionCompanies().filter(x=>x.id!==id);
+  if(!s.companies.length)s.companies=defaultCompanies();
+  saveDB();if(CLOUD.on)cloudSettingsDebounced();render();
+}
 function setEgpc(k,v){egpcSettings()[k]=n(v);saveDB();cloudSettingsDebounced();}
 let _brTimer=null;
 function renameBranchUI(id,name){const b=APP.branches.find(x=>x.id===id);if(b){b.name=name;saveAPP();renderTopbarUser();clearTimeout(_brTimer);if(CLOUD.on)_brTimer=setTimeout(()=>cloudRenameBranch(id,name),600);}}
@@ -1921,48 +1972,63 @@ function delSupplier(id){if(!confirm(t('confirm_del')))return;DB.supplierEntries
 /* ============================================================
    DAILY SHIFT CLOSING — detailed entry form + auto-calc + print
    Mirrors the paper "تقفيل وردية" sheet.
+   Two identical kinds: 'mech' (ميكانيكي) and 'digital' (ديجيتال).
+   Financial aggregation always uses the mechanical store; the
+   digital store is only used for the digital-vs-mechanical compare.
    ============================================================ */
 const FUELS=[['p92','p92'],['p95','p95'],['solar','solar']];
 function newPumps(){return [0,1,2,3].map(()=>({start:'',end:''}));}
-function lastShift(){
-  const sh=DB.shifts||[];if(!sh.length)return null;
+function shiftStore(kind){return kind==='digital'?(DB.shiftsDigital||(DB.shiftsDigital=[])):(DB.shifts||(DB.shifts=[]));}
+function lastShift(kind){
+  const sh=shiftStore(kind);if(!sh.length)return null;
   let best=null;sh.forEach(s=>{if(!best||((s.date||'')>=(best.date||'')))best=s;});
   return best;
 }
 // yesterday-morning (start) carries over automatically from the previous shift's today-morning (end)
-function carriedPumps(fkey){
-  const prev=lastShift();
+function carriedPumps(fkey,kind){
+  const prev=lastShift(kind);
   return [0,1,2,3].map(i=>{
     const e=(prev&&prev.pumps&&prev.pumps[fkey]&&prev.pumps[fkey][i])?prev.pumps[fkey][i].end:'';
     return {start:(e===null||e===undefined?'':e),end:''};
   });
 }
-function carriedHandover(){
-  const prev=lastShift();
+function carriedHandover(kind){
+  const prev=lastShift(kind);
   const pe=(prev&&prev.handover&&prev.handover.end)?prev.handover.end:{};
   const cv=v=>(v===undefined||v===null)?'':v;
   return {startLead:'',endLead:'',
     start:{p95:cv(pe.p95),p92:cv(pe.p92),solar:cv(pe.solar)},
     end:{p95:'',p92:'',solar:''}};
 }
-function newShift(){
+function emptyCollections(){const o={};collectionCompanies().forEach(c=>o[c.id]='');return o;}
+function newShift(kind){
+  kind=kind||'mech';
   const st=branchSettings();
-  return {date:new Date().toISOString().slice(0,10),lead:'',
+  return {kind:kind, date:new Date().toISOString().slice(0,10),lead:'',
     prices:JSON.parse(JSON.stringify(st.prices)),
-    pumps:{p92:carriedPumps('p92'),p95:carriedPumps('p95'),solar:carriedPumps('solar')},
-    oils:'', oilLines:[{qty:'',price:''}],
-    collections:{bank:'',petroapp:'',octane:'',petropay:''},
-    collTimes:{bank:'',petroapp:'',octane:'',petropay:''},
-    handover:carriedHandover(),
+    pumps:{p92:carriedPumps('p92',kind),p95:carriedPumps('p95',kind),solar:carriedPumps('solar',kind)},
+    calib:{p92:'',p95:'',solar:''},
+    oils:'', oilLines:[{name:'',qty:'',price:''}],
+    collections:emptyCollections(),
+    collTimes:emptyCollections(),
+    handover:carriedHandover(kind),
     expenses:[{label:'',amount:'',time:'',partnerId:''}],
-    prevCash:'',bankDeposit:'',
+    prevCash:'',deposit:'',withdraw:'',bankDeposit:'',
     commission:JSON.parse(JSON.stringify(st.commission)),
     incoming:[{type:'95',qty:'',invoice:'',note:''},{type:'92',qty:'',invoice:'',note:''},{type:'solar',qty:'',invoice:'',note:''}]};
 }
 function ensureShiftShape(s){
-  if(!s.collTimes)s.collTimes={bank:'',petroapp:'',octane:'',petropay:''};
+  if(!s.kind)s.kind='mech';
+  if(!s.calib)s.calib={p92:'',p95:'',solar:''};
+  if(s.deposit===undefined)s.deposit='';
+  if(s.withdraw===undefined)s.withdraw='';
+  // collections: make sure every current company has a key
+  if(!s.collections)s.collections={};
+  if(!s.collTimes)s.collTimes={};
+  collectionCompanies().forEach(c=>{if(s.collections[c.id]===undefined)s.collections[c.id]='';if(s.collTimes[c.id]===undefined)s.collTimes[c.id]='';});
   if(!s.handover)s.handover={startLead:'',endLead:'',start:{p95:'',p92:'',solar:''},end:{p95:'',p92:'',solar:''}};
-  if(!s.oilLines)s.oilLines = (n(s.oils)>0)?[{qty:1,price:n(s.oils)}]:[{qty:'',price:''}];
+  if(!s.oilLines)s.oilLines = (n(s.oils)>0)?[{name:'',qty:1,price:n(s.oils)}]:[{name:'',qty:'',price:''}];
+  (s.oilLines||[]).forEach(l=>{if(l.name===undefined)l.name='';});
   (s.expenses||[]).forEach(e=>{if(e.partnerId===undefined)e.partnerId='';});
   return s;
 }
@@ -1971,27 +2037,46 @@ function oilsTotal(s){
   return n(s.oils);
 }
 function computeShift(s){
-  const pr=s.prices||{};
-  const lit=f=>(s.pumps[f]||[]).reduce((a,p)=>a+Math.max(0,n(p.end)-n(p.start)),0);
-  const L={p92:lit('p92'),p95:lit('p95'),solar:lit('solar')};
+  const pr=s.prices||{};const cal=s.calib||{};
+  const gross=f=>(s.pumps[f]||[]).reduce((a,p)=>a+Math.max(0,n(p.end)-n(p.start)),0);
+  const G={p92:gross('p92'),p95:gross('p95'),solar:gross('solar')};              // gross liters (before calibration)
+  const L={p92:Math.max(0,G.p92-n(cal.p92)),p95:Math.max(0,G.p95-n(cal.p95)),solar:Math.max(0,G.solar-n(cal.solar))}; // net = sold
+  const calibTot=n(cal.p92)+n(cal.p95)+n(cal.solar);
   const amt={p92:L.p92*n(pr.p92),p95:L.p95*n(pr.p95),solar:L.solar*n(pr.solar)};
   const oils=oilsTotal(s);
   const salesTotal=amt.p92+amt.p95+amt.solar+oils;
   const col=s.collections||{};
-  const colTotal=n(col.bank)+n(col.petroapp)+n(col.octane)+n(col.petropay);
+  const colTotal=collectionCompanies().reduce((a,c)=>a+n(col[c.id]),0);
   const expTotal=sum(s.expenses||[],x=>x.amount);
   const netCash=salesTotal-colTotal-expTotal;
   const treasury=netCash+n(s.prevCash);
-  const cashInHand=treasury-n(s.bankDeposit);
+  const afterMoves=treasury+n(s.deposit)-n(s.withdraw);
+  const cashInHand=afterMoves-n(s.bankDeposit);
   const commB=(L.p92+L.p95)*n((s.commission||{}).benzeneRate);
   const commS=L.solar*n((s.commission||{}).solarRate);
-  return {L,amt,oils,salesTotal,col,colTotal,expTotal,netCash,treasury,cashInHand,commB,commS,commTotal:commB+commS};
+  return {G,L,calibTot,amt,oils,salesTotal,col,colTotal,expTotal,netCash,treasury,afterMoves,cashInHand,commB,commS,commTotal:commB+commS};
+}
+// total net liters for a kind on a given date (digital-vs-mechanical compare)
+function litersFor(kind,date){
+  const m={p92:0,p95:0,solar:0};
+  shiftStore(kind).filter(s=>s.date===date).forEach(s=>{const L=computeShift(s).L;m.p92+=L.p92;m.p95+=L.p95;m.solar+=L.solar;});
+  return m;
+}
+function litersForMonth(kind,ym){
+  const m={p92:0,p95:0,solar:0};
+  shiftStore(kind).filter(s=>(s.date||'').slice(0,7)===ym).forEach(s=>{const L=computeShift(s).L;m.p92+=L.p92;m.p95+=L.p95;m.solar+=L.solar;});
+  return m;
+}
+function calibForMonth(kind,ym){
+  let tot=0;shiftStore(kind).filter(s=>(s.date||'').slice(0,7)===ym).forEach(s=>{tot+=computeShift(s).calibTot;});return tot;
 }
 
-/* ---------- list ---------- */
-VIEWS.shifts=function(){
-  const sh=DB.shifts||[];
-  let h=`<div class="toolbar no-print"><button class="btn btn-primary" onclick="shiftForm(-1)">${icon('clock')} ${t('new_shift_day')}</button>
+/* ---------- list (shared by both kinds) ---------- */
+function shiftListView(kind){
+  const route=kind==='digital'?'shifts_digital':'shifts';
+  const title=kind==='digital'?t('shifts_digital'):t('shifts');
+  const sh=shiftStore(kind);
+  let h=`<div class="toolbar no-print"><button class="btn btn-primary" onclick="shiftForm(-1,'${kind}')">${icon('clock')} ${t('new_shift_day')}</button>
     <span class="pill">${icon('truck')} ${esc(branchName(APP.active.branch))}</span>
     <span class="spacer"></span>${sh.length?`<button class="btn" onclick="exportCSV('shifts')">${t('export_csv')}</button>`:''}</div>`;
   h+=`<div class="note no-print" style="margin-bottom:16px">${icon('file')}<div>${t('assumption_note')}</div></div>`;
@@ -2004,9 +2089,9 @@ VIEWS.shifts=function(){
         <div><div style="font-weight:800;font-size:15px">${fmtDate(s.date)}</div>
         <div style="font-size:12px;color:var(--txt2)">${esc(s.lead||'')}</div></div>
         <div class="no-print" style="display:flex;gap:4px">
-          <button class="btn btn-sm btn-ghost" onclick="printShift(${idx})" title="${t('print')}">${icon('file')}</button>
-          ${canEdit()?`<button class="btn btn-sm btn-ghost" onclick="shiftForm(${idx})">${t('edit')}</button>`:''}
-          ${canDelete()?`<button class="btn btn-sm btn-ghost btn-danger" onclick="delShift2(${idx})">${t('del')}</button>`:''}</div></div>
+          <button class="btn btn-sm btn-ghost" onclick="printShift(${idx},'${kind}')" title="${t('print')}">${icon('file')}</button>
+          ${canEdit()?`<button class="btn btn-sm btn-ghost" onclick="shiftForm(${idx},'${kind}')">${t('edit')}</button>`:''}
+          ${canDelete()?`<button class="btn btn-sm btn-ghost btn-danger" onclick="delShift2(${idx},'${kind}')">${t('del')}</button>`:''}</div></div>
       <table style="margin-top:12px;font-size:12.5px">
         <tr><td style="border:none;padding:4px 0">${t('shift_total')}</td><td class="t-num num" style="border:none;padding:4px 0;font-weight:800">${money(c.salesTotal)}</td></tr>
         <tr><td style="border:none;padding:4px 0">${t('collections')}</td><td class="t-num num" style="border:none;padding:4px 0">${money(c.colTotal)}</td></tr>
@@ -2015,15 +2100,19 @@ VIEWS.shifts=function(){
       </table></div>`;
   });
   return h+`</div>`;
-};
-function delShift2(i){if(!canDelete())return;if(!confirm(t('confirm_del')))return;const id=DB.shifts[i]&&DB.shifts[i]._id;DB.shifts.splice(i,1);saveDB();if(CLOUD.on)cloudDeleteShift(id);toast(t('deleted'));render();}
+}
+VIEWS.shifts=function(){return shiftListView('mech');};
+VIEWS.shifts_digital=function(){return shiftListView('digital');};
+function delShift2(i,kind){if(!canDelete())return;if(!confirm(t('confirm_del')))return;const st=shiftStore(kind);const id=st[i]&&st[i]._id;st.splice(i,1);saveDB();if(CLOUD.on&&id)cloudDeleteShift(id);toast(t('deleted'));render();}
 
 /* ---------- entry form ---------- */
-let SHIDX=-1;
-function shiftForm(idx){
-  SHIDX=idx;
-  window._sh = ensureShiftShape(idx>=0 ? JSON.parse(JSON.stringify(DB.shifts[idx])) : newShift());
-  ROUTE='shifts';renderNav();
+let SHIDX=-1, SHKIND='mech';
+function shiftForm(idx,kind){
+  SHKIND=kind||'mech';SHIDX=idx;
+  const store=shiftStore(SHKIND);
+  window._sh = ensureShiftShape(idx>=0 ? JSON.parse(JSON.stringify(store[idx])) : newShift(SHKIND));
+  window._sh.kind=SHKIND;
+  ROUTE=SHKIND==='digital'?'shifts_digital':'shifts';renderNav();
   const v=document.getElementById('view');v.classList.remove('anim');
   v.innerHTML=renderShiftForm();
   void v.offsetWidth;v.classList.add('anim');
@@ -2048,6 +2137,12 @@ function fuelTable(fkey){
         ${P.map(p=>`<td>${numCell(`pumps.${fkey}.${p}.start`,s.pumps[fkey][p].start)}</td>`).join('')}<td class="ro">—</td></tr>
       <tr><td class="lbl calc">الفرق <span style="color:var(--txt3);font-weight:600">(${t('auto')})</span></td>
         ${P.map(p=>`<td class="ro"><span id="diff_${fkey}_${p}" class="calc">0</span></td>`).join('')}
+        <td class="ro"><span id="gross_${fkey}" class="calc">0</span></td></tr>
+      <tr><td class="lbl">${t('calib')} <span style="color:var(--txt3);font-weight:600">(−)</span></td>
+        <td colspan="4">${numCell(`calib.${fkey}`,s.calib[fkey])}</td>
+        <td class="ro"><span id="calib_${fkey}" class="calc">0</span></td></tr>
+      <tr><td class="lbl calc">${t('net_liters')}</td>
+        <td colspan="4" class="ro" style="text-align:center;color:var(--txt3);font-size:11px">${t('net_after_calib')}</td>
         <td class="ro"><span id="lit_${fkey}" class="calc">0</span></td></tr>
       <tr><td class="lbl">${t('price')}${lock}</td><td colspan="2">${numCell(`prices.${fkey}`,s.prices[fkey],{disabled:!canPrice})}</td>
         <td class="lbl calc">${t('amount')}</td><td colspan="2" class="ro"><span id="amt_${fkey}" class="calc">0</span></td></tr>
@@ -2055,23 +2150,27 @@ function fuelTable(fkey){
 }
 function renderShiftForm(){
   const s=window._sh;
+  const kindLabel=s.kind==='digital'?t('shifts_digital'):t('shifts');
+  const backRoute=s.kind==='digital'?'shifts_digital':'shifts';
   let h=`<div class="toolbar no-print">
-    <button class="btn btn-ghost" onclick="go('shifts')">← ${t('shifts')}</button>
+    <button class="btn btn-ghost" onclick="go('${backRoute}')">← ${kindLabel}</button>
+    <span class="pill" style="font-weight:800">${kindLabel}</span>
     <span class="spacer"></span>
     <button class="btn" onclick="saveShift2(false)">${t('save')}</button>
     <button class="btn btn-primary" onclick="saveShift2(true)">${icon('file')} ${t('save_print')}</button></div>`;
   h+=`<div class="card card-pad" style="margin-bottom:16px"><div class="form-grid">
-    <div class="field"><label>${t('shift_date')} <span style="color:var(--txt3);font-weight:600">(${t('auto')} — ${t('date')})</span></label><input type="date" value="${esc(s.date)}" oninput="shSet('date',this.value)"></div>
+    <div class="field"><label>${t('shift_date')}</label><input type="date" value="${esc(s.date)}" oninput="shSet('date',this.value)"></div>
     <div class="field"><label>${t('shift_name')}</label><input value="${esc(s.lead)}" oninput="shSet('lead',this.value)"></div>
   </div></div>`;
 
+  const comps=collectionCompanies();
   h+=`<div class="two-col">
     <div class="card card-pad">
       ${fuelTable('p92')}${fuelTable('p95')}${fuelTable('solar')}
       <div class="form-sec">${t('oils_sales')} <button class="btn btn-sm no-print" onclick="shAddOil()">${t('add_oil_line')}</button></div>
-      <table class="form-tbl"><thead><tr><th>${t('oil_qty')}</th><th>${t('oil_price')}</th><th>${t('amount')}</th><th class="no-print"></th></tr></thead>
+      <table class="form-tbl"><thead><tr><th>${t('item_name')}</th><th>${t('oil_qty')}</th><th>${t('oil_price')}</th><th>${t('amount')}</th><th class="no-print"></th></tr></thead>
       <tbody>${s.oilLines.map((l,i)=>oilRow(l,i)).join('')}
-        <tr><td colspan="2" class="lbl calc">${t('oils_total')}</td><td class="ro"><span id="oil_tot" class="calc">0</span></td><td class="no-print"></td></tr>
+        <tr><td colspan="3" class="lbl calc">${t('oils_total')}</td><td class="ro"><span id="oil_tot" class="calc">0</span></td><td class="no-print"></td></tr>
       </tbody></table>
       <div class="form-sec">${t('comm_per_liter')}${isSuper()?'':' 🔒'}</div>
       <table class="form-tbl"><tbody>
@@ -2098,11 +2197,11 @@ function renderShiftForm(){
     </div>
 
     <div class="card card-pad">
-      <div class="form-sec">${t('collections')}</div>
+      <div class="form-sec">${t('collections')} <span style="color:var(--txt3);font-weight:600;font-size:11px">(${t('from_settings')})</span></div>
       <table class="form-tbl"><thead><tr><th>${t('type')}</th><th>${t('amount')}</th><th>${t('delivery_time')}</th></tr></thead><tbody>
-        ${[['bank','بنك / Bank'],['petroapp',t('petroapp')],['octane',t('octane')],['petropay',t('petropay')]].map(([k,lbl])=>
-          `<tr><td class="lbl">${lbl}</td><td>${numCell('collections.'+k,s.collections[k])}</td>
-           <td><input class="side-in" style="text-align:center" value="${esc(s.collTimes[k]||'')}" oninput="shSet('collTimes.${k}',this.value)" placeholder="--:--"></td></tr>`).join('')}
+        ${comps.map(co=>
+          `<tr><td class="lbl">${esc(co.name)}</td><td>${numCell('collections.'+co.id,s.collections[co.id])}</td>
+           <td><input class="side-in" style="text-align:center" value="${esc(s.collTimes[co.id]||'')}" oninput="shSet('collTimes.${co.id}',this.value)" placeholder="--:--"></td></tr>`).join('')}
         <tr><td class="lbl calc">${t('total')}</td><td class="ro"><span id="c_col" class="calc">0</span></td><td></td></tr>
       </tbody></table>
 
@@ -2119,7 +2218,9 @@ function renderShiftForm(){
         <tr><td class="lbl">− ${t('expenses')}</td><td class="ro"><span id="c_exp2">0</span></td></tr>
         <tr><td class="lbl calc">= ${t('net_after_exp')} (نقدي)</td><td class="ro"><span id="c_net" class="calc">0</span></td></tr>
         <tr><td class="lbl">+ ${t('prev_cash')}</td><td>${numCell('prevCash',s.prevCash)}</td></tr>
-        <tr><td class="lbl">= ${t('grand_total')} بالخزينة</td><td class="ro"><span id="c_treasury" class="calc">0</span></td></tr>
+        <tr><td class="lbl calc">= ${t('grand_total')} بالخزينة</td><td class="ro"><span id="c_treasury" class="calc">0</span></td></tr>
+        <tr><td class="lbl">+ ${t('deposit_ext')}</td><td>${numCell('deposit',s.deposit)}</td></tr>
+        <tr><td class="lbl">− ${t('withdraw_cash')}</td><td>${numCell('withdraw',s.withdraw)}</td></tr>
         <tr><td class="lbl">− ${t('bank_deposit')}</td><td>${numCell('bankDeposit',s.bankDeposit)}</td></tr>
         <tr><td class="lbl calc">= ${t('cash_in_hand')}</td><td class="ro"><span id="c_cash" class="calc">0</span></td></tr>
       </tbody></table>
@@ -2131,7 +2232,12 @@ function renderShiftForm(){
   </div>`;
   return h;
 }
+function itemDatalist(){
+  const items=(DB.items||[]).map(x=>x.name).filter(Boolean);
+  return `<datalist id="oilItems">${items.map(nm=>`<option value="${esc(nm)}">`).join('')}</datalist>`;
+}
 function oilRow(l,i){return `<tr>
+  <td><input class="side-in" list="oilItems" style="text-align:start" value="${esc(l.name||'')}" oninput="shSet('oilLines.${i}.name',this.value)" placeholder="${t('item_name')}">${i===0?itemDatalist():''}</td>
   <td>${numCell(`oilLines.${i}.qty`,l.qty)}</td>
   <td>${numCell(`oilLines.${i}.price`,l.price)}</td>
   <td class="ro"><span id="oilamt_${i}" class="calc">0</span></td>
@@ -2162,18 +2268,18 @@ function shSet(path,val){
 }
 function shAddExp(){window._sh.expenses.push({label:'',amount:'',time:'',partnerId:''});reRenderForm();}
 function shDelExp(i){window._sh.expenses.splice(i,1);if(!window._sh.expenses.length)window._sh.expenses.push({label:'',amount:'',time:'',partnerId:''});reRenderForm();}
-function shAddOil(){window._sh.oilLines.push({qty:'',price:''});reRenderForm();}
-function shDelOil(i){window._sh.oilLines.splice(i,1);if(!window._sh.oilLines.length)window._sh.oilLines.push({qty:'',price:''});reRenderForm();}
+function shAddOil(){window._sh.oilLines.push({name:'',qty:'',price:''});reRenderForm();}
+function shDelOil(i){window._sh.oilLines.splice(i,1);if(!window._sh.oilLines.length)window._sh.oilLines.push({name:'',qty:'',price:''});reRenderForm();}
 function shAddInc(){window._sh.incoming.push({type:'95',qty:'',invoice:'',note:''});reRenderForm();}
 function shDelInc(i){window._sh.incoming.splice(i,1);reRenderForm();}
 function reRenderForm(){const v=document.getElementById('view');v.innerHTML=renderShiftForm();shRecalc();}
 
 function shRecalc(){
-  const c=computeShift(window._sh);
+  const c=computeShift(window._sh);const cal=window._sh.calib||{};
   const set=(id,v,dec)=>{const e=document.getElementById(id);if(e)e.textContent=fmt(v,dec);};
   FUELS.forEach(([f])=>{
     (window._sh.pumps[f]||[]).forEach((p,i)=>{const e=document.getElementById('diff_'+f+'_'+i);if(e)e.textContent=fmt(Math.max(0,n(p.end)-n(p.start)),0);});
-    set('lit_'+f,c.L[f],0);set('amt_'+f,c.amt[f],0);});
+    set('gross_'+f,c.G[f],0);set('calib_'+f,n(cal[f]),0);set('lit_'+f,c.L[f],0);set('amt_'+f,c.amt[f],0);});
   (window._sh.oilLines||[]).forEach((l,i)=>{const e=document.getElementById('oilamt_'+i);if(e)e.textContent=fmt(n(l.qty)*n(l.price),0);});
   set('oil_tot',oilsTotal(window._sh),0);
   set('c_col',c.colTotal);set('c_col2',c.colTotal);set('c_exp',c.expTotal);set('c_exp2',c.expTotal);
@@ -2181,17 +2287,19 @@ function shRecalc(){
   set('c_commB',c.commB);set('c_commS',c.commS);set('c_commT',c.commTotal);
 }
 function saveShift2(thenPrint){
-  const s=window._sh;
-  if(SHIDX>=0)DB.shifts[SHIDX]=s;else{DB.shifts.push(s);SHIDX=DB.shifts.length-1;}
+  const s=window._sh;const kind=s.kind||'mech';const store=shiftStore(kind);
+  if(SHIDX>=0)store[SHIDX]=s;else{store.push(s);SHIDX=store.length-1;}
   saveDB();if(CLOUD.on)cloudSaveShift(APP.active.branch,s);toast(t('saved'));
-  if(thenPrint)printShift(SHIDX);else render();
+  if(thenPrint)printShift(SHIDX,kind);else render();
 }
 
 /* ---------- printable paper layout ---------- */
-function printShift(idx){
-  const s=ensureShiftShape(DB.shifts[idx]);const c=computeShift(s);
+function printShift(idx,kind){
+  kind=kind||'mech';const store=shiftStore(kind);
+  const s=ensureShiftShape(store[idx]);const c=computeShift(s);
   const money0=v=>fmt(v,0);
-  const ct=s.collTimes||{};
+  const ct=s.collTimes||{};const comps=collectionCompanies();
+  const title=kind==='digital'?t('shifts_digital'):t('shifts');
   const fuelBlock=(fkey)=>{
     const p=s.pumps[fkey];
     const diff=i=>Math.max(0,n(p[i].end)-n(p[i].start));
@@ -2199,21 +2307,20 @@ function printShift(idx){
       <tr><td class="h">${t('label')}</td><td class="h">4</td><td class="h">3</td><td class="h">2</td><td class="h">1</td><td class="h">${t('total')}</td></tr>
       <tr><td class="h">${t('today_morning')}</td>${[3,2,1,0].map(i=>`<td>${p[i].end!==''?fmt(p[i].end,0):''}</td>`).join('')}<td></td></tr>
       <tr><td class="h">${t('yest_morning')}</td>${[3,2,1,0].map(i=>`<td>${p[i].start!==''?fmt(p[i].start,0):''}</td>`).join('')}<td></td></tr>
-      <tr><td class="h">الفرق</td>${[3,2,1,0].map(i=>`<td>${fmt(diff(i),0)}</td>`).join('')}<td class="b">${fmt(c.L[fkey],0)}</td></tr>
+      <tr><td class="h">الفرق</td>${[3,2,1,0].map(i=>`<td>${fmt(diff(i),0)}</td>`).join('')}<td class="b">${fmt(c.G[fkey],0)}</td></tr>
+      <tr><td class="h">${t('calib')}</td><td colspan="4"></td><td>${fmt(n((s.calib||{})[fkey]),0)}</td></tr>
+      <tr><td class="h">${t('net_liters')}</td><td colspan="4"></td><td class="b">${fmt(c.L[fkey],0)}</td></tr>
     </table>`;
   };
   const html=`<div class="print-area">
     <div class="pp-head"><div class="pp-logo">${LOGO_SVG}</div>
       <div><div class="pp-t">${t('company')} — ${esc(branchName(APP.active.branch))}</div>
-      <div class="pp-s">${t('new_shift_day')} · ${fmtDate(s.date)} · ${esc(s.lead||'')}</div></div></div>
+      <div class="pp-s">${title} · ${fmtDate(s.date)} · ${esc(s.lead||'')}</div></div></div>
     <div class="pp-grid">
       <div class="pp-col" style="order:1">
         <table class="pp"><tr><th colspan="3">${t('collections')}</th></tr>
           <tr><td class="h">${t('delivery_time')}</td><td class="h">${t('amount')}</td><td class="h">${t('type')}</td></tr>
-          <tr><td>${esc(ct.bank||'')}</td><td>${money0(s.collections.bank)}</td><td class="h">بنك</td></tr>
-          <tr><td>${esc(ct.petroapp||'')}</td><td>${money0(s.collections.petroapp)}</td><td class="h">${t('petroapp')}</td></tr>
-          <tr><td>${esc(ct.octane||'')}</td><td>${money0(s.collections.octane)}</td><td class="h">${t('octane')}</td></tr>
-          <tr><td>${esc(ct.petropay||'')}</td><td>${money0(s.collections.petropay)}</td><td class="h">${t('petropay')}</td></tr>
+          ${comps.map(co=>`<tr><td>${esc(ct[co.id]||'')}</td><td>${money0(s.collections[co.id])}</td><td class="h">${esc(co.name)}</td></tr>`).join('')}
           <tr><td></td><td class="b">${money0(c.colTotal)}</td><td class="h">${t('total')}</td></tr>
         </table>
         <table class="pp"><tr><th colspan="2">${t('expenses')}</th></tr>
@@ -2228,18 +2335,17 @@ function printShift(idx){
           <tr><td class="b">${money0(c.amt.p92)}</td><td>${fmt(s.prices.p92,2)}</td><td>${fmt(c.L.p92,0)}</td><td class="h">92</td></tr>
           <tr><td class="b">${money0(c.amt.p95)}</td><td>${fmt(s.prices.p95,2)}</td><td>${fmt(c.L.p95,0)}</td><td class="h">95</td></tr>
           <tr><td class="b">${money0(c.amt.solar)}</td><td>${fmt(s.prices.solar,2)}</td><td>${fmt(c.L.solar,0)}</td><td class="h">${t('solar')}</td></tr>
-          <tr><td class="b">${money0(c.oils)}</td><td colspan="2" style="font-size:10px">${(s.oilLines||[]).filter(l=>l.qty||l.price).map(l=>`${fmt(l.qty,0)}×${fmt(l.price,2)}`).join(' + ')}</td><td class="h">${t('oils_sales')}</td></tr>
+          <tr><td class="b">${money0(c.oils)}</td><td colspan="2" style="font-size:10px">${(s.oilLines||[]).filter(l=>l.qty||l.price).map(l=>`${esc(l.name||'')} ${fmt(l.qty,0)}×${fmt(l.price,2)}`).join(' + ')}</td><td class="h">${t('oils_sales')}</td></tr>
         </table>
         <table class="pp">
           <tr><td class="b">${money0(c.salesTotal)}</td><td class="h">${t('shift_total')}</td></tr>
-          <tr><td>${money0(c.col.bank)}</td><td class="h">بنك</td></tr>
-          <tr><td>${money0(c.col.petroapp)}</td><td class="h">${t('petroapp')}</td></tr>
-          <tr><td>${money0(c.col.octane)}</td><td class="h">${t('octane')}</td></tr>
-          <tr><td>${money0(c.col.petropay)}</td><td class="h">${t('petropay')}</td></tr>
+          ${comps.map(co=>`<tr><td>${money0(s.collections[co.id])}</td><td class="h">${esc(co.name)}</td></tr>`).join('')}
           <tr><td>${money0(c.expTotal)}</td><td class="h">${t('expenses')}</td></tr>
           <tr><td class="b">${money0(c.netCash)}</td><td class="h">${t('net_after_exp')}</td></tr>
           <tr><td>${money0(s.prevCash)}</td><td class="h">${t('prev_cash')}</td></tr>
           <tr><td class="b">${money0(c.treasury)}</td><td class="h">${t('grand_total')}</td></tr>
+          <tr><td>${money0(s.deposit)}</td><td class="h">${t('deposit_ext')}</td></tr>
+          <tr><td>${money0(s.withdraw)}</td><td class="h">${t('withdraw_cash')}</td></tr>
           <tr><td>${money0(s.bankDeposit)}</td><td class="h">${t('bank_deposit')}</td></tr>
           <tr><td class="b">${money0(c.cashInHand)}</td><td class="h">${t('cash_in_hand')}</td></tr>
         </table>
@@ -2267,162 +2373,90 @@ function printShift(idx){
   </div>`;
   const v=document.getElementById('view');
   v.innerHTML=`<div class="toolbar no-print">
-    <button class="btn btn-ghost" onclick="go('shifts')">← ${t('shifts')}</button>
+    <button class="btn btn-ghost" onclick="go('${kind==='digital'?'shifts_digital':'shifts'}')">← ${title}</button>
     <span class="spacer"></span><button class="btn btn-primary" onclick="window.print()">${icon('file')} ${t('print_shift')}</button></div>`+html;
   document.getElementById('pageTitle').textContent=t('print_shift');
   document.getElementById('pageSub').textContent=fmtDate(s.date);
 }
 
 /* ============================================================
-   DIGITAL & MECHANICAL  (standalone — not tied to a shift)
-   Enter digital meter readings per date; compare with the
-   mechanical (shift) readings of the same date if one exists.
-   Readings carry over: today's reading → tomorrow's "yesterday".
+   DIGITAL vs MECHANICAL — comparison only.
+   Compares the net liters of the mechanical shift closings
+   (تقفيل وردية ميكانيكي) against the digital shift closings
+   (تقفيل وردية ديجيتال) for a day or a month, and shows the
+   monthly calibration (العيارات) totals on the side.
    ============================================================ */
-const NOZ_LABELS=['L11','L21','L31','L41'];
 let digMode='daily', digYM=null, digDate=null;
 
-function digEntries(){ if(!DB.digitalEntries)DB.digitalEntries=[]; return DB.digitalEntries; }
-function digEntryFor(date){ return digEntries().find(e=>e.date===date); }
-function prevDigEntry(date){ let best=null; digEntries().forEach(e=>{ if((e.date||'')<(date||'')){ if(!best||(e.date||'')>(best.date||''))best=e; } }); return best; }
-function blankDigital(carry){
-  const g=(type,pi,ni,fld)=>{ try{ return carry.digital[type][pi].nozzles[ni][fld]; }catch(e){ return ''; } };
-  const cv=v=>(v===undefined||v===null)?'':v;
-  const bnoz=(pi,ni)=>({fuel:cv(g('benzene',pi,ni,'fuel'))||['92','92','95','95'][ni], today:'', yest:cv(g('benzene',pi,ni,'today'))});
-  const snoz=(pi,ni)=>({today:'', yest:cv(g('solar',pi,ni,'today'))});
-  return { benzene:[0,1,2,3].map(pi=>({nozzles:[0,1,2,3].map(ni=>bnoz(pi,ni))})),
-           solar:[0,1].map(pi=>({nozzles:[0,1,2,3].map(ni=>snoz(pi,ni))})) };
-}
-function digTotalsOf(digital){
-  const dg={p92:0,p95:0,solar:0};
-  ((digital||{}).benzene||[]).forEach(p=>p.nozzles.forEach(nz=>{const d=Math.max(0,n(nz.today)-n(nz.yest));if(nz.fuel==='95')dg.p95+=d;else dg.p92+=d;}));
-  ((digital||{}).solar||[]).forEach(p=>p.nozzles.forEach(nz=>{dg.solar+=Math.max(0,n(nz.today)-n(nz.yest));}));
-  return dg;
-}
-function mechForDate(date){
-  const m={p92:0,p95:0,solar:0};
-  (DB.shifts||[]).filter(s=>s.date===date).forEach(s=>{const L=computeShift(s).L;m.p92+=L.p92;m.p95+=L.p95;m.solar+=L.solar;});
-  return m;
-}
-function mechForMonth(ym){
-  const m={p92:0,p95:0,solar:0};
-  (DB.shifts||[]).filter(s=>(s.date||'').slice(0,7)===ym).forEach(s=>{const L=computeShift(s).L;m.p92+=L.p92;m.p95+=L.p95;m.solar+=L.solar;});
-  return m;
+function cmpCompanyName(){return '';}
+function digCompareTable(dig,mech,pr,title){
+  const prods=[['92','p92',pr.p92],['95','p95',pr.p95],[t('solar'),'solar',pr.solar]];
+  return `<div class="card" style="margin-top:16px"><div class="card-head"><h3>${esc(title)}</h3></div>
+    <div class="tbl-wrap"><table><thead><tr><th>${t('fuel_type')}</th><th class="t-num">${t('digital')}</th>
+    <th class="t-num">${t('mechanical')}</th><th class="t-num">${t('diff_col')}</th><th class="t-num">${t('price')}</th><th class="t-num">${t('amount')} (${t('diff_col')})</th></tr></thead><tbody>
+    ${prods.map(([lbl,k,price])=>{const d=dig[k],m=mech[k],diff=d-m;
+      return `<tr><td class="h">${esc(lbl)}</td><td class="t-num num" style="font-weight:700;color:var(--brand2)">${fmt(d,0)}</td>
+      <td class="t-num num">${fmt(m,0)}</td><td class="t-num num ${diff<0?'neg':'pos'}">${fmt(diff,0)}</td>
+      <td class="t-num num">${fmt(price,2)}</td><td class="t-num num ${diff<0?'neg':'pos'}">${money(diff*n(price))}</td></tr>`;}).join('')}
+    </tbody><tfoot><tr><td>${t('total')}</td>
+      <td class="t-num num">${fmt(dig.p92+dig.p95+dig.solar,0)}</td>
+      <td class="t-num num">${fmt(mech.p92+mech.p95+mech.solar,0)}</td>
+      <td class="t-num num">${fmt((dig.p92+dig.p95+dig.solar)-(mech.p92+mech.p95+mech.solar),0)}</td>
+      <td colspan="2"></td></tr></tfoot></table></div></div>`;
 }
 
 VIEWS.digital_mech=function(){
   let h=printHead(t('digital_mech'));
+  h+=`<div class="note no-print" style="margin-bottom:12px">${icon('file')}<div>${t('cmp_note')}</div></div>`;
   h+=`<div class="seg no-print" style="margin-bottom:14px">
     <button class="${digMode==='daily'?'on':''}" onclick="digMode='daily';render()">${t('daily_mode')}</button>
     <button class="${digMode==='month'?'on':''}" onclick="digMode='month';render()">${t('month_total')}</button></div>`;
+  if(!canEdit())return h+`<div class="card"><div class="empty">${icon('file')}<div>${t('digital_hidden')}</div></div></div>`;
   if(digMode==='month')return h+digMonthView();
 
   if(!digDate)digDate=new Date().toISOString().slice(0,10);
-  if(!window._dig||window._digDate!==digDate)digDailyLoad();
-  const dig=window._dig;
-  const saved=digEntries().map(e=>e.date).sort().reverse();
-  const locked=!!digEntryFor(digDate)&&!canDelete();   // saved day → only super / area manager edits
-  window._digLocked=locked;
-  h+=`<div class="toolbar no-print">
+  const dig=litersFor('digital',digDate);
+  const mech=litersFor('mech',digDate);
+  const pr=branchSettings().prices||{};
+  const savedDays={};(DB.shifts||[]).forEach(s=>{if(s.date)savedDays[s.date]=1;});(DB.shiftsDigital||[]).forEach(s=>{if(s.date)savedDays[s.date]=1;});
+  const days=Object.keys(savedDays).sort().reverse();
+  h+=`<div class="toolbar no-print"><span class="pill">${icon('truck')} ${esc(branchName(APP.active.branch))}</span>
     <div class="field" style="margin:0"><label style="display:none">d</label>
-      <input type="date" value="${esc(digDate)}" oninput="digDate=this.value;digDailyLoad();render()"></div>
-    ${saved.length?`<div class="field" style="margin:0;min-width:150px"><label style="display:none">s</label>
-      <select onchange="digDate=this.value;digDailyLoad();render()"><option value="">— أيام مسجّلة —</option>${saved.map(d=>`<option value="${d}" ${d===digDate?'selected':''}>${fmtDate(d)}</option>`).join('')}</select></div>`:''}
-    <span class="spacer"></span>
-    ${locked?'':`<button class="btn btn-primary" onclick="saveDigital()">${icon('file')} ${t('save_digital')}</button>`}
-    ${(digEntryFor(digDate)&&canDelete())?`<button class="btn btn-ghost btn-danger" onclick="digDelDay()">${t('del')} ${t('daily_mode')}</button>`:''}
-    <button class="btn" onclick="window.print()">${t('print')}</button></div>`;
-  if(locked)h+=`<div class="note no-print" style="margin-bottom:14px">${icon('file')}<div>${t('dig_locked')}</div></div>`;
-  if(!canEdit())h+=`<div class="note no-print" style="margin-bottom:14px">${icon('file')}<div>${t('digital_hidden')}</div></div>`;
-
-  h+=`<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(520px,1fr))">`;
-  dig.benzene.forEach((p,pi)=>{h+=digPumpTable('benzene',pi,p,`${t('pump_n')} ${pi+1}`,true);});
-  dig.solar.forEach((p,pi)=>{h+=digPumpTable('solar',pi,p,`${t('solar')} ${pi+1}`,false);});
-  h+=`</div>`;
-
-  if(canEdit()){
-    const dg=digTotalsOf(dig); const mech=mechForDate(digDate); const pr=branchSettings().prices||{};
-    h+=digCompareTable(dg,mech,pr,t('comparison'));
-  }
+      <input type="date" value="${esc(digDate)}" oninput="digDate=this.value;render()"></div>
+    ${days.length?`<div class="field" style="margin:0;min-width:150px"><label style="display:none">s</label>
+      <select onchange="digDate=this.value;render()"><option value="">${t('all_months')}</option>${days.map(d=>`<option value="${d}" ${d===digDate?'selected':''}>${fmtDate(d)}</option>`).join('')}</select></div>`:''}
+    <span class="spacer"></span><button class="btn" onclick="window.print()">${icon('file')} ${t('print')}</button></div>`;
+  h+=`<div class="grid kpis">
+    ${kpi(t('shifts_digital'),fmt(dig.p92+dig.p95+dig.solar,0)+' '+t('liter'),'grid','ic-y')}
+    ${kpi(t('shifts'),fmt(mech.p92+mech.p95+mech.solar,0)+' '+t('liter'),'droplet','ic-b')}
+  </div>`;
+  h+=digCompareTable(dig,mech,pr,t('comparison')+' — '+fmtDate(digDate));
   return h;
 };
-function digPumpTable(type,pi,pump,title,withFuel){
-  const N=[0,1,2,3];
-  const lk=window._digLocked?'disabled':'',lki=window._digLocked?'readonly':'';
-  const fuelRow=withFuel?`<tr><td class="lbl">${t('fuel_type')}</td>${N.map(ni=>`<td><select class="side-in" style="text-align:center" ${lk} onchange="digSet('${type}',${pi},${ni},'fuel',this.value)">
-      <option value="92" ${pump.nozzles[ni].fuel==='92'?'selected':''}>92</option><option value="95" ${pump.nozzles[ni].fuel==='95'?'selected':''}>95</option></select></td>`).join('')}</tr>`:'';
-  return `<div class="card card-pad"><div class="form-sec" style="margin-top:0">${esc(title)}</div>
-    <table class="form-tbl digtbl"><thead><tr><th>${t('label')}</th>${NOZ_LABELS.map(l=>`<th>${l}</th>`).join('')}</tr></thead><tbody>
-      ${fuelRow}
-      <tr><td class="lbl">${t('today_morning')}</td>${N.map(ni=>`<td><input class="side-in" type="number" step="any" ${lki} value="${pump.nozzles[ni].today}" oninput="digSet('${type}',${pi},${ni},'today',this.value)"></td>`).join('')}</tr>
-      <tr><td class="lbl">${t('yest_morning')}</td>${N.map(ni=>`<td><input class="side-in" type="number" step="any" ${lki} value="${pump.nozzles[ni].yest}" oninput="digSet('${type}',${pi},${ni},'yest',this.value)"></td>`).join('')}</tr>
-      <tr><td class="lbl calc">${t('diff_col')}</td>${N.map(ni=>`<td class="ro"><span id="dg_${type}_${pi}_${ni}" class="calc">0</span></td>`).join('')}</tr>
-    </tbody></table></div>`;
-}
-function digCompareTable(dg,mech,pr,title){
-  const prods=[['92','p92',pr.p92],['95','p95',pr.p95],[t('solar'),'solar',pr.solar]];
-  return `<div class="card" style="margin-top:16px"><div class="card-head"><h3>${esc(title)}</h3></div>
-    <div class="tbl-wrap"><table><thead><tr><th>${t('fuel_type')}</th><th class="t-num">${t('digital')}</th>
-    <th class="t-num">${t('mechanical')}</th><th class="t-num">${t('diff_col')}</th><th class="t-num">${t('price')}</th><th class="t-num">${t('amount')}</th></tr></thead><tbody>
-    ${prods.map(([lbl,k,price])=>{const d=dg[k],m=mech[k],diff=d-m;
-      return `<tr><td class="h">${esc(lbl)}</td><td class="t-num num" style="font-weight:700;color:var(--brand2)">${fmt(d,0)}</td>
-      <td class="t-num num">${fmt(m,0)}</td><td class="t-num num ${diff<0?'neg':'pos'}">${fmt(diff,0)}</td>
-      <td class="t-num num">${fmt(price,2)}</td><td class="t-num num">${money(d*n(price))}</td></tr>`;}).join('')}
-    </tbody></table></div></div>`;
-}
-function digDailyLoad(){
-  const e=digEntryFor(digDate);
-  window._dig = e ? JSON.parse(JSON.stringify(e.digital)) : blankDigital(prevDigEntry(digDate));
-  window._digDate=digDate;
-}
-AFTER.digital_mech=function(){
-  if(digMode!=='daily'||!window._dig)return;
-  ['benzene','solar'].forEach(type=>(window._dig[type]||[]).forEach((p,pi)=>p.nozzles.forEach((nz,ni)=>{
-    const el=document.getElementById(`dg_${type}_${pi}_${ni}`);if(el)el.textContent=fmt(Math.max(0,n(nz.today)-n(nz.yest)),0);})));
-};
-function digSet(type,pi,ni,field,val){
-  window._dig[type][pi].nozzles[ni][field]=val;
-  const nz=window._dig[type][pi].nozzles[ni];
-  const el=document.getElementById(`dg_${type}_${pi}_${ni}`);if(el)el.textContent=fmt(Math.max(0,n(nz.today)-n(nz.yest)),0);
-}
-function digDelDay(){
-  if(!canDelete())return;
-  if(!confirm(t('del')+' '+fmtDate(digDate)+' ؟'))return;
-  DB.digitalEntries=digEntries().filter(e=>e.date!==digDate);
-  window._dig=null;
-  saveDB();if(CLOUD.on)cloudSettingsDebounced();
-  toast(t('deleted'));render();
-}
-function saveDigital(){
-  if(digEntryFor(digDate)&&!canDelete()){toast(t('dig_locked'),'err');return;}
-  const entries=digEntries();
-  const i=entries.findIndex(e=>e.date===digDate);
-  const rec={id:(i>=0?entries[i].id:genId()),date:digDate,digital:window._dig};
-  if(i>=0)entries[i]=rec;else entries.push(rec);
-  saveDB();if(CLOUD.on)cloudSettingsDebounced();
-  toast(t('saved'));render();
-}
 
 /* ---------- month total ---------- */
 function digMonthView(){
-  const set={};digEntries().forEach(e=>{if(e.date)set[e.date.slice(0,7)]=true;});
-  (DB.shifts||[]).forEach(s=>{if(s.date)set[s.date.slice(0,7)]=true;});
+  const set={};
+  (DB.shifts||[]).forEach(s=>{if(s.date)set[s.date.slice(0,7)]=1;});
+  (DB.shiftsDigital||[]).forEach(s=>{if(s.date)set[s.date.slice(0,7)]=1;});
   const months=Object.keys(set).sort().reverse();
   let h=`<div class="toolbar no-print"><span class="pill">${icon('truck')} ${esc(branchName(APP.active.branch))}</span><span class="spacer"></span>`;
   if(!months.length)return h+`</div><div class="card"><div class="empty">${icon('grid')}<div>${t('no_shifts_month')}</div></div></div>`;
-  if(!canEdit())return h+`</div><div class="card"><div class="empty">${icon('file')}<div>${t('digital_hidden')}</div></div></div>`;
   if(digYM===null||!months.includes(digYM))digYM=months[0];
   h+=`<div class="field" style="margin:0;min-width:180px"><label style="display:none">m</label>
     <select onchange="digYM=this.value;render()">${months.map(m=>`<option value="${m}" ${m===digYM?'selected':''}>${monthLabelAr(m)}</option>`).join('')}</select></div>
     <button class="btn btn-primary" onclick="window.print()">${icon('file')} ${t('print')}</button></div>`;
-  const dg={p92:0,p95:0,solar:0};
-  digEntries().filter(e=>(e.date||'').slice(0,7)===digYM).forEach(e=>{const d=digTotalsOf(e.digital);dg.p92+=d.p92;dg.p95+=d.p95;dg.solar+=d.solar;});
-  const mech=mechForMonth(digYM); const pr=branchSettings().prices||{};
+  const dig=litersForMonth('digital',digYM);
+  const mech=litersForMonth('mech',digYM);
+  const pr=branchSettings().prices||{};
+  const calM=calibForMonth('mech',digYM), calD=calibForMonth('digital',digYM);
   h+=`<div class="grid kpis">
-    ${kpi(t('digital'),fmt(dg.p92+dg.p95+dg.solar,0)+' '+t('liter'),'grid','ic-y')}
-    ${kpi(t('mechanical'),fmt(mech.p92+mech.p95+mech.solar,0)+' '+t('liter'),'droplet','ic-b')}
+    ${kpi(t('shifts_digital'),fmt(dig.p92+dig.p95+dig.solar,0)+' '+t('liter'),'grid','ic-y')}
+    ${kpi(t('shifts'),fmt(mech.p92+mech.p95+mech.solar,0)+' '+t('liter'),'droplet','ic-b')}
+    ${kpi(t('calib_total')+' ('+t('shifts')+')',fmt(calM,0)+' '+t('liter'),'file','ic-r')}
+    ${kpi(t('calib_total')+' ('+t('shifts_digital')+')',fmt(calD,0)+' '+t('liter'),'file','ic-r')}
   </div>`;
-  h+=digCompareTable(dg,mech,pr,t('comparison')+' — '+monthLabelAr(digYM));
+  h+=digCompareTable(dig,mech,pr,t('comparison')+' — '+monthLabelAr(digYM));
   return h;
 }
 
@@ -2831,11 +2865,8 @@ function ledgerRows(key){
     .sort((a,b)=>(a.date||'').localeCompare(b.date||'')).forEach(s=>{
     const c=computeShift(s);const col=s.collections||{};const ct=s.collTimes||{};
     const addI=(amt,label,note)=>{if(n(amt))rows.push({date:s.date,income:n(amt),label,note:note||''});};
-    addI(col.bank,'فيزا / بنك',ct.bank);
-    addI(col.petroapp,t('petroapp'),ct.petroapp);
-    addI(col.octane,t('octane'),ct.octane);
-    addI(col.petropay,t('petropay'),ct.petropay);
-    if(c.oils)rows.push({date:s.date,income:c.oils,label:'زيت',note:(s.oilLines||[]).filter(l=>l.qty).map(l=>`${fmt(l.qty,0)}*${fmt(l.price,0)}`).join(' + ')});
+    collectionCompanies().forEach(co=>addI(col[co.id],co.name,ct[co.id]));
+    if(c.oils)rows.push({date:s.date,income:c.oils,label:'زيت',note:(s.oilLines||[]).filter(l=>l.qty).map(l=>`${esc(l.name||'')} ${fmt(l.qty,0)}*${fmt(l.price,0)}`).join(' + ')});
     (s.expenses||[]).forEach(e=>{if(e.label||e.amount){
       const pn=e.partnerId?((DB.partners||[]).find(x=>x.id===e.partnerId)||{}).name:'';
       rows.push({date:s.date,expense:n(e.amount),label:e.label,note:[pn,e.time].filter(Boolean).join(' · ')});}});
@@ -3020,7 +3051,7 @@ VIEWS.users=function(){
   h+=`<div class="note no-print" style="margin-top:16px">${icon('file')}<div>${t('disclaimer')}</div></div>`;
   return h;
 };
-const PAGE_LIST=[['dashboard'],['inventory'],['shifts'],['digital_mech'],['income_expense'],['monthly'],['partners'],['reports']];
+const PAGE_LIST=[['dashboard'],['inventory'],['shifts'],['shifts_digital'],['digital_mech'],['income_expense'],['monthly'],['partners'],['reports']];
 function editUser(id){
   const u=id?APP.users.find(x=>x.id===id):{name:'',username:'',password:'',role:'branch',branchId:'b1',pages:null};
   const pages=Array.isArray(u.pages)?u.pages:null;
