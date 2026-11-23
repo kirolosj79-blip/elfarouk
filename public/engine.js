@@ -38,6 +38,8 @@ const DICT = {
   companies_note:{ar:'الشركات دي بتظهر في خانة التحصيل في تقفيل الوردية. تقدر تضيف/تعدّل/تمسح، وكل فرع ليه شركاته.',en:'These appear in the collections box of the shift closing. Add/edit/remove — each branch has its own.'},
   company_name:{ar:'اسم الشركة',en:'Company name'},
   add_company:{ar:'إضافة شركة',en:'Add company'},
+  from_below:{ar:'من الجدول تحت',en:'from table below'},
+  add_item_new:{ar:'إضافة صنف جديد',en:'Add new item'},
   monthly:{ar:'التقفيل الشهري',en:'Monthly Closing'},
   monthly_sub:{ar:'الأرباح والمصروفات ورأس المال',en:'Profit, expenses & capital'},
   tanks:{ar:'جرد التنكات',en:'Tank Reconciliation'},
@@ -2164,23 +2166,10 @@ function renderShiftForm(){
   </div></div>`;
 
   const comps=collectionCompanies();
-  h+=`<div class="two-col">
-    <div class="card card-pad">
+  // 3-column layout mirroring the paper/print: بنزين RIGHT, مبيعات/خزينة MIDDLE, تحصيل/مصروفات LEFT
+  h+=`<div class="shift-grid">
+    <div class="card card-pad shcol">
       ${fuelTable('p92')}${fuelTable('p95')}${fuelTable('solar')}
-      <div class="form-sec">${t('oils_sales')} <button class="btn btn-sm no-print" onclick="shAddOil()">${t('add_oil_line')}</button></div>
-      <table class="form-tbl"><thead><tr><th>${t('item_name')}</th><th>${t('oil_qty')}</th><th>${t('oil_price')}</th><th>${t('amount')}</th><th class="no-print"></th></tr></thead>
-      <tbody>${s.oilLines.map((l,i)=>oilRow(l,i)).join('')}
-        <tr><td colspan="3" class="lbl calc">${t('oils_total')}</td><td class="ro"><span id="oil_tot" class="calc">0</span></td><td class="no-print"></td></tr>
-      </tbody></table>
-      <div class="form-sec">${t('comm_per_liter')}${isSuper()?'':' 🔒'}</div>
-      <table class="form-tbl"><tbody>
-        <tr><td class="lbl">${t('comm_benzene')} (92+95)</td><td>${numCell('commission.benzeneRate',s.commission.benzeneRate,{disabled:!isSuper()})}</td>
-            <td class="ro"><span id="c_commB" class="calc">0</span></td></tr>
-        <tr><td class="lbl">${t('comm_solar')}</td><td>${numCell('commission.solarRate',s.commission.solarRate,{disabled:!isSuper()})}</td>
-            <td class="ro"><span id="c_commS" class="calc">0</span></td></tr>
-        <tr><td class="lbl calc">${t('total')}</td><td colspan="2" class="ro"><span id="c_commT" class="calc">0</span></td></tr>
-      </tbody></table>
-
       <div class="form-sec">${t('handover')}</div>
       <table class="form-tbl"><thead><tr><th>${t('label')}</th><th>95</th><th>92</th><th>${t('solar')}</th><th>${t('shift_name')}</th></tr></thead><tbody>
         <tr><td class="lbl">${t('start_row')} <span style="color:var(--txt3);font-weight:600">(${t('carried')})</span></td>
@@ -2196,19 +2185,20 @@ function renderShiftForm(){
       </tbody></table>
     </div>
 
-    <div class="card card-pad">
-      <div class="form-sec">${t('collections')} <span style="color:var(--txt3);font-weight:600;font-size:11px">(${t('from_settings')})</span></div>
-      <table class="form-tbl"><thead><tr><th>${t('type')}</th><th>${t('amount')}</th><th>${t('delivery_time')}</th></tr></thead><tbody>
-        ${comps.map(co=>
-          `<tr><td class="lbl">${esc(co.name)}</td><td>${numCell('collections.'+co.id,s.collections[co.id])}</td>
-           <td><input class="side-in" style="text-align:center" value="${esc(s.collTimes[co.id]||'')}" oninput="shSet('collTimes.${co.id}',this.value)" placeholder="--:--"></td></tr>`).join('')}
-        <tr><td class="lbl calc">${t('total')}</td><td class="ro"><span id="c_col" class="calc">0</span></td><td></td></tr>
+    <div class="card card-pad shcol">
+      <div class="form-sec">${t('sales_by_product')}</div>
+      <table class="form-tbl"><thead><tr><th>${t('type')}</th><th>${t('liters_sold')}</th><th>${t('price')}</th><th>${t('amount')}</th></tr></thead><tbody>
+        <tr><td class="lbl">92</td><td class="ro"><span id="sp_lit_p92">0</span></td><td class="ro">${fmt(s.prices.p92,2)}</td><td class="ro"><span id="sp_amt_p92" class="calc">0</span></td></tr>
+        <tr><td class="lbl">95</td><td class="ro"><span id="sp_lit_p95">0</span></td><td class="ro">${fmt(s.prices.p95,2)}</td><td class="ro"><span id="sp_amt_p95" class="calc">0</span></td></tr>
+        <tr><td class="lbl">${t('solar')}</td><td class="ro"><span id="sp_lit_solar">0</span></td><td class="ro">${fmt(s.prices.solar,2)}</td><td class="ro"><span id="sp_amt_solar" class="calc">0</span></td></tr>
+        <tr><td class="lbl">${t('oils_sales')}</td><td colspan="2" class="ro" style="text-align:center;color:var(--txt3);font-size:11px">${t('from_below')}</td><td class="ro"><span id="sp_oil" class="calc">0</span></td></tr>
+        <tr><td class="lbl calc">${t('shift_total')}</td><td colspan="2"></td><td class="ro"><span id="c_sales0" class="calc">0</span></td></tr>
       </tbody></table>
 
-      <div class="form-sec">${t('expenses')} <button class="btn btn-sm no-print" onclick="shAddExp()">${t('add_expense')}</button></div>
-      <table class="form-tbl"><thead><tr><th>${t('expense_line')}</th><th>${t('amount')}</th><th>${t('account')}</th><th>${t('delivery_time')}</th><th class="no-print"></th></tr></thead>
-      <tbody id="expBody">${s.expenses.map((e,i)=>expRow(e,i)).join('')}
-        <tr><td class="lbl calc">${t('exp_total')}</td><td class="ro"><span id="c_exp" class="calc">0</span></td><td></td><td></td><td class="no-print"></td></tr>
+      <div class="form-sec">${t('oils_sales')} <button class="btn btn-sm no-print" onclick="shAddOil()">${t('add_oil_line')}</button></div>
+      <table class="form-tbl"><thead><tr><th>${t('item_name')}</th><th>${t('oil_qty')}</th><th>${t('oil_price')}</th><th>${t('amount')}</th><th class="no-print"></th></tr></thead>
+      <tbody>${s.oilLines.map((l,i)=>oilRow(l,i)).join('')}
+        <tr><td colspan="3" class="lbl calc">${t('oils_total')}</td><td class="ro"><span id="oil_tot" class="calc">0</span></td><td class="no-print"></td></tr>
       </tbody></table>
 
       <div class="form-sec">${t('reconcile')}</div>
@@ -2225,23 +2215,82 @@ function renderShiftForm(){
         <tr><td class="lbl calc">= ${t('cash_in_hand')}</td><td class="ro"><span id="c_cash" class="calc">0</span></td></tr>
       </tbody></table>
 
+      <div class="form-sec">${t('comm_per_liter')}${isSuper()?'':' 🔒'}</div>
+      <table class="form-tbl"><tbody>
+        <tr><td class="lbl">${t('comm_benzene')} (92+95)</td><td>${numCell('commission.benzeneRate',s.commission.benzeneRate,{disabled:!isSuper()})}</td>
+            <td class="ro"><span id="c_commB" class="calc">0</span></td></tr>
+        <tr><td class="lbl">${t('comm_solar')}</td><td>${numCell('commission.solarRate',s.commission.solarRate,{disabled:!isSuper()})}</td>
+            <td class="ro"><span id="c_commS" class="calc">0</span></td></tr>
+        <tr><td class="lbl calc">${t('total')}</td><td colspan="2" class="ro"><span id="c_commT" class="calc">0</span></td></tr>
+      </tbody></table>
+
       <div class="form-sec">${t('incoming')} <button class="btn btn-sm no-print" onclick="shAddInc()">${t('add')}</button></div>
       <table class="form-tbl"><thead><tr><th>${t('type')}</th><th>${t('qty')} (${t('liter')})</th><th>${t('invoice_no')}</th><th>${t('notes')}</th><th class="no-print"></th></tr></thead>
       <tbody id="incBody">${s.incoming.map((e,i)=>incRow(e,i)).join('')}</tbody></table>
     </div>
+
+    <div class="card card-pad shcol">
+      <div class="form-sec">${t('collections')} <span style="color:var(--txt3);font-weight:600;font-size:11px">(${t('from_settings')})</span></div>
+      <table class="form-tbl"><thead><tr><th>${t('type')}</th><th>${t('amount')}</th><th>${t('delivery_time')}</th></tr></thead><tbody>
+        ${comps.map(co=>
+          `<tr><td class="lbl">${esc(co.name)}</td><td>${numCell('collections.'+co.id,s.collections[co.id])}</td>
+           <td><input class="side-in" style="text-align:center" value="${esc(s.collTimes[co.id]||'')}" oninput="shSet('collTimes.${co.id}',this.value)" placeholder="--:--"></td></tr>`).join('')}
+        <tr><td class="lbl calc">${t('total')}</td><td class="ro"><span id="c_col" class="calc">0</span></td><td></td></tr>
+      </tbody></table>
+
+      <div class="form-sec">${t('expenses')} <button class="btn btn-sm no-print" onclick="shAddExp()">${t('add_expense')}</button></div>
+      <table class="form-tbl"><thead><tr><th>${t('expense_line')}</th><th>${t('amount')}</th><th>${t('account')}</th><th>${t('delivery_time')}</th><th class="no-print"></th></tr></thead>
+      <tbody id="expBody">${s.expenses.map((e,i)=>expRow(e,i)).join('')}
+        <tr><td class="lbl calc">${t('exp_total')}</td><td class="ro"><span id="c_exp" class="calc">0</span></td><td></td><td></td><td class="no-print"></td></tr>
+      </tbody></table>
+    </div>
   </div>`;
+  // wrap every entry table in a horizontal-scroll container so wide tables
+  // stay inside the card on phones instead of pushing the layout off-screen
+  h=h.replace(/<table class="form-tbl"/g,'<div class="ftw"><table class="form-tbl"').replace(/<\/table>/g,'</table></div>');
   return h;
 }
 function itemDatalist(){
   const items=(DB.items||[]).map(x=>x.name).filter(Boolean);
   return `<datalist id="oilItems">${items.map(nm=>`<option value="${esc(nm)}">`).join('')}</datalist>`;
 }
+function oilItemSelect(i,val){
+  const items=(DB.items||[]).map(x=>x.name).filter(Boolean);
+  const known=val&&items.includes(val);
+  return `<select class="side-in" style="text-align:start" onchange="oilItemChange(${i},this.value)">
+    <option value="" ${!val?'selected':''}>— ${t('item_name')} —</option>
+    ${items.map(nm=>`<option value="${esc(nm)}" ${val===nm?'selected':''}>${esc(nm)}</option>`).join('')}
+    ${(val&&!known)?`<option value="${esc(val)}" selected>${esc(val)}</option>`:''}
+    <option value="__new__">➕ ${t('add_item_new')}</option></select>`;
+}
 function oilRow(l,i){return `<tr>
-  <td><input class="side-in" list="oilItems" style="text-align:start" value="${esc(l.name||'')}" oninput="shSet('oilLines.${i}.name',this.value)" placeholder="${t('item_name')}">${i===0?itemDatalist():''}</td>
+  <td>${oilItemSelect(i,l.name||'')}</td>
   <td>${numCell(`oilLines.${i}.qty`,l.qty)}</td>
   <td>${numCell(`oilLines.${i}.price`,l.price)}</td>
   <td class="ro"><span id="oilamt_${i}" class="calc">0</span></td>
   <td class="no-print"><button class="btn btn-sm btn-ghost btn-danger" onclick="shDelOil(${i})">✕</button></td></tr>`;}
+function oilItemChange(i,val){
+  if(val==='__new__'){addItemModal(i);return;}
+  window._sh.oilLines[i].name=val;shRecalc();
+}
+function addItemModal(oilIdx){
+  modal(t('add_item_new'),
+    `<div class="field"><label>${t('item_name')}</label><input id="ni_name" autofocus></div>
+     <div class="field"><label>${t('code')} (${t('optional')})</label><input id="ni_code"></div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">${t('cancel')}</button>
+     <button class="btn btn-primary" onclick="saveNewItem(${oilIdx})">${t('save')}</button>`);
+}
+function saveNewItem(oilIdx){
+  const name=(document.getElementById('ni_name').value||'').trim();
+  if(!name){toast(t('item_name')+' ؟','err');return;}
+  if(!DB.items)DB.items=[];
+  if(!DB.items.some(x=>x.name===name)){
+    const code=(document.getElementById('ni_code').value||'').trim()||String((DB.items.length||0)+1);
+    DB.items.push({code,name});saveDB();if(CLOUD.on&&typeof cloudSettingsDebounced==='function')cloudSettingsDebounced();
+  }
+  if(window._sh&&window._sh.oilLines[oilIdx])window._sh.oilLines[oilIdx].name=name;
+  closeModal();reRenderForm();
+}
 function partnerSelect(i,pid){
   const ps=DB.partners||[];
   return `<select class="side-in" style="text-align:center" onchange="shSet('expenses.${i}.partnerId',this.value)">
@@ -2282,6 +2331,9 @@ function shRecalc(){
     set('gross_'+f,c.G[f],0);set('calib_'+f,n(cal[f]),0);set('lit_'+f,c.L[f],0);set('amt_'+f,c.amt[f],0);});
   (window._sh.oilLines||[]).forEach((l,i)=>{const e=document.getElementById('oilamt_'+i);if(e)e.textContent=fmt(n(l.qty)*n(l.price),0);});
   set('oil_tot',oilsTotal(window._sh),0);
+  // sales-by-product summary
+  FUELS.forEach(([f])=>{set('sp_lit_'+f,c.L[f],0);set('sp_amt_'+f,c.amt[f],0);});
+  set('sp_oil',c.oils,0);set('c_sales0',c.salesTotal);
   set('c_col',c.colTotal);set('c_col2',c.colTotal);set('c_exp',c.expTotal);set('c_exp2',c.expTotal);
   set('c_sales',c.salesTotal);set('c_net',c.netCash);set('c_treasury',c.treasury);set('c_cash',c.cashInHand);
   set('c_commB',c.commB);set('c_commS',c.commS);set('c_commT',c.commTotal);
