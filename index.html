@@ -379,20 +379,21 @@ body{background:var(--bg)}
 .digtbl th{font-size:12.5px;padding:8px 6px}
 
 /* ---------- printable paper sheet ---------- */
-.print-area{background:#fff;color:#111;border-radius:12px;padding:20px;border:1px solid var(--line)}
+/* ---- printable "تقفيل وردية" sheet: plain black & white, exact copy of the paper ---- */
+.print-area{background:#fff;color:#000;border-radius:0;padding:16px;border:1px solid #000}
 :root[data-theme="dark"] .print-area{background:#fff}
-.pp-head{display:flex;align-items:center;gap:14px;border-bottom:3px solid var(--brand);padding-bottom:12px;margin-bottom:14px}
-.pp-logo{width:48px;height:48px;border-radius:12px;background:radial-gradient(120% 120% at 30% 20%,var(--brand2),var(--branddk));display:grid;place-items:center;flex:none}
-.pp-logo svg{width:30px;height:30px}
-.pp-t{font-size:18px;font-weight:800;color:#111}
-.pp-s{font-size:12.5px;color:#444;font-weight:600}
+.pp-head{display:flex;align-items:center;gap:12px;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:14px}
+.pp-logo{width:44px;height:44px;border-radius:8px;border:1.5px solid #000;background:#fff;display:grid;place-items:center;flex:none;color:#000}
+.pp-logo svg{width:28px;height:28px}
+.pp-t{font-size:18px;font-weight:800;color:#000}
+.pp-s{font-size:12.5px;color:#000;font-weight:600}
 .pp-grid{display:grid;grid-template-columns:1fr 1.1fr 1fr;gap:12px;align-items:start}
-.pp{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:12px;color:#111}
-.pp th{background:#c8a44a;color:#1a1403;font-weight:800;padding:6px;border:1px solid #9c7e2f;text-align:center;font-size:12.5px}
-.pp td{border:1px solid #bbb;padding:5px 7px;text-align:center;font-variant-numeric:tabular-nums}
-.pp td.h{background:#f3eede;font-weight:700;white-space:nowrap}
-.pp td.b{font-weight:800;background:#faf6ea}
-.pp-foot{margin-top:10px;border-top:1px solid #ddd;padding-top:8px;font-size:11px;color:#666;text-align:center}
+.pp{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:12px;color:#000}
+.pp th{background:#e6e6e6;color:#000;font-weight:800;padding:6px;border:1px solid #000;text-align:center;font-size:12.5px}
+.pp td{border:1px solid #000;padding:5px 7px;text-align:center;font-variant-numeric:tabular-nums;color:#000}
+.pp td.h{background:#efefef;font-weight:700;white-space:nowrap}
+.pp td.b{font-weight:800;background:#fff}
+.pp-foot{margin-top:10px;border-top:1px solid #000;padding-top:8px;font-size:11px;color:#000;text-align:center}
 .exp-hidden{display:none}
 .exp-band:hover{background:#faf6ea}
 @media print{.exp-hidden{display:none!important}}
@@ -2847,10 +2848,10 @@ function printShift(idx,kind){
     const p=s.pumps[fkey];
     const diff=i=>Math.max(0,n(p[i].end)-n(p[i].start));
     return `<table class="pp"><tr><th colspan="6">${t(fkey)}</th></tr>
-      <tr><td class="h">${t('label')}</td><td class="h">4</td><td class="h">3</td><td class="h">2</td><td class="h">1</td><td class="h">${t('total')}</td></tr>
-      <tr><td class="h">${t('today_morning')}</td>${[3,2,1,0].map(i=>`<td>${p[i].end!==''?fmt(p[i].end,0):''}</td>`).join('')}<td></td></tr>
-      <tr><td class="h">${t('yest_morning')}</td>${[3,2,1,0].map(i=>`<td>${p[i].start!==''?fmt(p[i].start,0):''}</td>`).join('')}<td></td></tr>
-      <tr><td class="h">الفرق</td>${[3,2,1,0].map(i=>`<td>${fmt(diff(i),0)}</td>`).join('')}<td class="b">${fmt(c.G[fkey],0)}</td></tr>
+      <tr><td class="h">${t('label')}</td><td class="h">1</td><td class="h">2</td><td class="h">3</td><td class="h">4</td><td class="h">${t('total')}</td></tr>
+      <tr><td class="h">${t('today_morning')}</td>${[0,1,2,3].map(i=>`<td>${p[i].end!==''?fmt(p[i].end,0):''}</td>`).join('')}<td></td></tr>
+      <tr><td class="h">${t('yest_morning')}</td>${[0,1,2,3].map(i=>`<td>${p[i].start!==''?fmt(p[i].start,0):''}</td>`).join('')}<td></td></tr>
+      <tr><td class="h">الفرق</td>${[0,1,2,3].map(i=>`<td>${fmt(diff(i),0)}</td>`).join('')}<td class="b">${fmt(c.G[fkey],0)}</td></tr>
       <tr><td class="h">${t('calib')}</td><td colspan="4"></td><td>${fmt(n((s.calib||{})[fkey]),0)}</td></tr>
       <tr><td class="h">${t('net_liters')}</td><td colspan="4"></td><td class="b">${fmt(c.L[fkey],0)}</td></tr>
     </table>`;
@@ -2906,9 +2907,9 @@ function printShift(idx,kind){
       <div class="pp-col" style="order:-1">
         ${fuelBlock('p92')}${fuelBlock('p95')}${fuelBlock('solar')}
         <table class="pp"><tr><th colspan="5">${t('handover')}</th></tr>
-          <tr><td class="h">${t('shift_name')}</td><td class="h">${t('solar')}</td><td class="h">92</td><td class="h">95</td><td class="h">${t('label')}</td></tr>
-          <tr><td>${esc(s.handover.startLead||'')}</td><td>${s.handover.start.solar!==''?money0(s.handover.start.solar):''}</td><td>${s.handover.start.p92!==''?money0(s.handover.start.p92):''}</td><td>${s.handover.start.p95!==''?money0(s.handover.start.p95):''}</td><td class="h">${t('start_row')}</td></tr>
-          <tr><td>${esc(s.handover.endLead||'')}</td><td>${s.handover.end.solar!==''?money0(s.handover.end.solar):''}</td><td>${s.handover.end.p92!==''?money0(s.handover.end.p92):''}</td><td>${s.handover.end.p95!==''?money0(s.handover.end.p95):''}</td><td class="h">${t('end_row')}</td></tr>
+          <tr><td class="h">${t('label')}</td><td class="h">95</td><td class="h">92</td><td class="h">${t('solar')}</td><td class="h">${t('shift_name')}</td></tr>
+          <tr><td class="h">${t('start_row')}</td><td>${s.handover.start.p95!==''?money0(s.handover.start.p95):''}</td><td>${s.handover.start.p92!==''?money0(s.handover.start.p92):''}</td><td>${s.handover.start.solar!==''?money0(s.handover.start.solar):''}</td><td>${esc(s.handover.startLead||'')}</td></tr>
+          <tr><td class="h">${t('end_row')}</td><td>${s.handover.end.p95!==''?money0(s.handover.end.p95):''}</td><td>${s.handover.end.p92!==''?money0(s.handover.end.p92):''}</td><td>${s.handover.end.solar!==''?money0(s.handover.end.solar):''}</td><td>${esc(s.handover.endLead||'')}</td></tr>
         </table>
       </div>
     </div>

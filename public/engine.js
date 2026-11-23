@@ -2356,10 +2356,10 @@ function printShift(idx,kind){
     const p=s.pumps[fkey];
     const diff=i=>Math.max(0,n(p[i].end)-n(p[i].start));
     return `<table class="pp"><tr><th colspan="6">${t(fkey)}</th></tr>
-      <tr><td class="h">${t('label')}</td><td class="h">4</td><td class="h">3</td><td class="h">2</td><td class="h">1</td><td class="h">${t('total')}</td></tr>
-      <tr><td class="h">${t('today_morning')}</td>${[3,2,1,0].map(i=>`<td>${p[i].end!==''?fmt(p[i].end,0):''}</td>`).join('')}<td></td></tr>
-      <tr><td class="h">${t('yest_morning')}</td>${[3,2,1,0].map(i=>`<td>${p[i].start!==''?fmt(p[i].start,0):''}</td>`).join('')}<td></td></tr>
-      <tr><td class="h">الفرق</td>${[3,2,1,0].map(i=>`<td>${fmt(diff(i),0)}</td>`).join('')}<td class="b">${fmt(c.G[fkey],0)}</td></tr>
+      <tr><td class="h">${t('label')}</td><td class="h">1</td><td class="h">2</td><td class="h">3</td><td class="h">4</td><td class="h">${t('total')}</td></tr>
+      <tr><td class="h">${t('today_morning')}</td>${[0,1,2,3].map(i=>`<td>${p[i].end!==''?fmt(p[i].end,0):''}</td>`).join('')}<td></td></tr>
+      <tr><td class="h">${t('yest_morning')}</td>${[0,1,2,3].map(i=>`<td>${p[i].start!==''?fmt(p[i].start,0):''}</td>`).join('')}<td></td></tr>
+      <tr><td class="h">الفرق</td>${[0,1,2,3].map(i=>`<td>${fmt(diff(i),0)}</td>`).join('')}<td class="b">${fmt(c.G[fkey],0)}</td></tr>
       <tr><td class="h">${t('calib')}</td><td colspan="4"></td><td>${fmt(n((s.calib||{})[fkey]),0)}</td></tr>
       <tr><td class="h">${t('net_liters')}</td><td colspan="4"></td><td class="b">${fmt(c.L[fkey],0)}</td></tr>
     </table>`;
@@ -2415,9 +2415,9 @@ function printShift(idx,kind){
       <div class="pp-col" style="order:-1">
         ${fuelBlock('p92')}${fuelBlock('p95')}${fuelBlock('solar')}
         <table class="pp"><tr><th colspan="5">${t('handover')}</th></tr>
-          <tr><td class="h">${t('shift_name')}</td><td class="h">${t('solar')}</td><td class="h">92</td><td class="h">95</td><td class="h">${t('label')}</td></tr>
-          <tr><td>${esc(s.handover.startLead||'')}</td><td>${s.handover.start.solar!==''?money0(s.handover.start.solar):''}</td><td>${s.handover.start.p92!==''?money0(s.handover.start.p92):''}</td><td>${s.handover.start.p95!==''?money0(s.handover.start.p95):''}</td><td class="h">${t('start_row')}</td></tr>
-          <tr><td>${esc(s.handover.endLead||'')}</td><td>${s.handover.end.solar!==''?money0(s.handover.end.solar):''}</td><td>${s.handover.end.p92!==''?money0(s.handover.end.p92):''}</td><td>${s.handover.end.p95!==''?money0(s.handover.end.p95):''}</td><td class="h">${t('end_row')}</td></tr>
+          <tr><td class="h">${t('label')}</td><td class="h">95</td><td class="h">92</td><td class="h">${t('solar')}</td><td class="h">${t('shift_name')}</td></tr>
+          <tr><td class="h">${t('start_row')}</td><td>${s.handover.start.p95!==''?money0(s.handover.start.p95):''}</td><td>${s.handover.start.p92!==''?money0(s.handover.start.p92):''}</td><td>${s.handover.start.solar!==''?money0(s.handover.start.solar):''}</td><td>${esc(s.handover.startLead||'')}</td></tr>
+          <tr><td class="h">${t('end_row')}</td><td>${s.handover.end.p95!==''?money0(s.handover.end.p95):''}</td><td>${s.handover.end.p92!==''?money0(s.handover.end.p92):''}</td><td>${s.handover.end.solar!==''?money0(s.handover.end.solar):''}</td><td>${esc(s.handover.endLead||'')}</td></tr>
         </table>
       </div>
     </div>

@@ -366,20 +366,20 @@ body{background:var(--bg)}
 .digtbl th{font-size:12.5px;padding:8px 6px}
 
 /* ---------- printable paper sheet ---------- */
-.print-area{background:#fff;color:#111;border-radius:12px;padding:20px;border:1px solid var(--line)}
+.print-area{background:#fff;color:#000;border-radius:0;padding:16px;border:1px solid #000}
 :root[data-theme="dark"] .print-area{background:#fff}
-.pp-head{display:flex;align-items:center;gap:14px;border-bottom:3px solid var(--brand);padding-bottom:12px;margin-bottom:14px}
-.pp-logo{width:48px;height:48px;border-radius:12px;background:radial-gradient(120% 120% at 30% 20%,var(--brand2),var(--branddk));display:grid;place-items:center;flex:none}
-.pp-logo svg{width:30px;height:30px}
-.pp-t{font-size:18px;font-weight:800;color:#111}
-.pp-s{font-size:12.5px;color:#444;font-weight:600}
+.pp-head{display:flex;align-items:center;gap:12px;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:14px}
+.pp-logo{width:44px;height:44px;border-radius:8px;border:1.5px solid #000;background:#fff;display:grid;place-items:center;flex:none;color:#000}
+.pp-logo svg{width:28px;height:28px}
+.pp-t{font-size:18px;font-weight:800;color:#000}
+.pp-s{font-size:12.5px;color:#000;font-weight:600}
 .pp-grid{display:grid;grid-template-columns:1fr 1.1fr 1fr;gap:12px;align-items:start}
-.pp{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:12px;color:#111}
-.pp th{background:#c8a44a;color:#1a1403;font-weight:800;padding:6px;border:1px solid #9c7e2f;text-align:center;font-size:12.5px}
-.pp td{border:1px solid #bbb;padding:5px 7px;text-align:center;font-variant-numeric:tabular-nums}
-.pp td.h{background:#f3eede;font-weight:700;white-space:nowrap}
-.pp td.b{font-weight:800;background:#faf6ea}
-.pp-foot{margin-top:10px;border-top:1px solid #ddd;padding-top:8px;font-size:11px;color:#666;text-align:center}
+.pp{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:12px;color:#000}
+.pp th{background:#e6e6e6;color:#000;font-weight:800;padding:6px;border:1px solid #000;text-align:center;font-size:12.5px}
+.pp td{border:1px solid #000;padding:5px 7px;text-align:center;font-variant-numeric:tabular-nums;color:#000}
+.pp td.h{background:#efefef;font-weight:700;white-space:nowrap}
+.pp td.b{font-weight:800;background:#fff}
+.pp-foot{margin-top:10px;border-top:1px solid #000;padding-top:8px;font-size:11px;color:#000;text-align:center}
 .exp-hidden{display:none}
 .exp-band:hover{background:#faf6ea}
 @media print{.exp-hidden{display:none!important}}
