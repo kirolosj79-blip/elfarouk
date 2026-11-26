@@ -147,8 +147,11 @@ const DICT = {
   // tanks
   period:{ar:'الفترة',en:'Period'},
   solar:{ar:'سولار',en:'Diesel'},
+  p80:{ar:'بنزين 80',en:'Gasoline 80'},
   p92:{ar:'بنزين 92',en:'Gasoline 92'},
   p95:{ar:'بنزين 95',en:'Gasoline 95'},
+  fuels_title:{ar:'أنواع الوقود في الفرع',en:'Branch fuel types'},
+  fuels_note:{ar:'اختر الأنواع اللي الفرع ده بيبيعها. بنزين 80 بيتفعّل للفرع المحدد بس (زي ادكو ومرغم).',en:'Pick the fuels this branch sells. Gasoline 80 is per-branch.'},
   sold_net:{ar:'صافي المباع',en:'Net Sold'},
   calib:{ar:'العيارات',en:'Calibration'},
   sold_gross:{ar:'إجمالي المباع',en:'Gross Sold'},
@@ -640,10 +643,23 @@ const BRANCH_COUNT=BRANCH_NAMES.length;
 function defaultCompanies(){
   return [{id:'bank',name:'بنك'},{id:'petroapp',name:'بترو أب'},{id:'octane',name:'أوكتين'},{id:'petropay',name:'بترو باي'}];
 }
+/* ---- fuel types (بنزين 80 is optional, per-branch) ---- */
+const FUEL_META={p80:{lbl:'بنزين 80',benzene:true},p92:{lbl:'بنزين 92',benzene:true},p95:{lbl:'بنزين 95',benzene:true},solar:{lbl:'سولار',benzene:false}};
+const FUEL_ORDER=['p80','p92','p95','solar'];
+function fuelLbl(f){return (FUEL_META[f]||{}).lbl||f;}
+// which fuels does the ACTIVE branch sell (بنزين 80 only where enabled: ادكو b3 & مرغم b4 by default)
+function branchFuels(){
+  const s=branchSettings();
+  if(Array.isArray(s.fuels)&&s.fuels.length)return s.fuels.slice();
+  const b=APP.active.branch;
+  return (b==='b3'||b==='b4')?['p80','p92','p95','solar']:['p92','p95','solar'];
+}
+// fuels of a specific shift (snapshot taken when it was created)
+function shiftFuels(s){return (s&&Array.isArray(s.fuels)&&s.fuels.length)?s.fuels:['p92','p95','solar'];}
 function defaultSettings(){
-  return {prices:{p92:22.25,p95:24,solar:20.5}, commission:{benzeneRate:0.5143,solarRate:0.358},
-    egpc:{p92:0.5503,p95:0.671,solar:0.3811,percent:0.30,tax:0.02},
-    openingStock:{p92:'',p95:'',solar:''},
+  return {prices:{p80:0,p92:22.25,p95:24,solar:20.5}, commission:{benzeneRate:0.5143,solarRate:0.358},
+    egpc:{p80:0.5503,p92:0.5503,p95:0.671,solar:0.3811,percent:0.30,tax:0.02},
+    openingStock:{p80:'',p92:'',p95:'',solar:''},
     channelOpening:{bank:'',petroapp:'',octane:'',petropay:''},
     companies:defaultCompanies(),
     supplierName:'أولى إنرجي', supplierOpening:''};
@@ -802,6 +818,7 @@ alter table public.settings add column if not exists supplier_entries jsonb not 
 alter table public.settings add column if not exists digital_entries  jsonb not null default '[]';
 alter table public.settings add column if not exists ledger_manual    jsonb not null default '[]';
 alter table public.settings add column if not exists companies        jsonb not null default '[{"id":"bank","name":"بنك"},{"id":"petroapp","name":"بترو أب"},{"id":"octane","name":"أوكتين"},{"id":"petropay","name":"بترو باي"}]';
+alter table public.settings add column if not exists fuels            jsonb not null default '["p92","p95","solar"]';
 alter table public.settings add column if not exists supplier_name  text default 'أولى إنرجي';
 alter table public.settings add column if not exists supplier_opening numeric default 0;
 
@@ -971,7 +988,7 @@ async function cloudLoadAll(user){
   APP.data={};
   visible.forEach(b=>{const d=emptyBranch();const st=setMap[b.id];
     if(st){d.settings={prices:st.prices,commission:st.commission,egpc:st.egpc||undefined,openingStock:st.opening_stock||undefined,
-        channelOpening:st.channel_opening||undefined,companies:(st.companies&&st.companies.length?st.companies:defaultCompanies()),supplierName:st.supplier_name||'أولى إنرجي',supplierOpening:st.supplier_opening||''};
+        channelOpening:st.channel_opening||undefined,companies:(st.companies&&st.companies.length?st.companies:defaultCompanies()),fuels:(st.fuels&&st.fuels.length?st.fuels:undefined),supplierName:st.supplier_name||'أولى إنرجي',supplierOpening:st.supplier_opening||''};
       d.partners=st.partners||[];d.partnerTxns=st.partner_txns||[];
       d.channelManual=st.channel_manual||[];d.supplierEntries=st.supplier_entries||[];d.digitalEntries=st.digital_entries||[];d.ledgerManual=st.ledger_manual||[];}
     APP.data[b.id]=d;});
@@ -1003,7 +1020,7 @@ async function cloudSaveMonthly(branchId,m){try{if(!m._id)m._id=genId();
 async function cloudSaveSettings(branchId,s){try{
   const d=APP.data[branchId]||{};
   await CLOUD.sb.from('settings').upsert({branch_id:branchId,prices:s.prices,commission:s.commission,egpc:s.egpc||null,
-    opening_stock:s.openingStock||null,channel_opening:s.channelOpening||{},companies:s.companies||defaultCompanies(),supplier_name:s.supplierName||'أولى إنرجي',
+    opening_stock:s.openingStock||null,channel_opening:s.channelOpening||{},companies:s.companies||defaultCompanies(),fuels:s.fuels||branchFuels(),supplier_name:s.supplierName||'أولى إنرجي',
     supplier_opening:n(s.supplierOpening)||0,channel_manual:d.channelManual||[],supplier_entries:d.supplierEntries||[],digital_entries:d.digitalEntries||[],ledger_manual:d.ledgerManual||[],
     partners:d.partners||[],partner_txns:d.partnerTxns||[],updated_at:new Date().toISOString()});
 }catch(e){cloudErr(e);}}
@@ -1458,8 +1475,8 @@ VIEWS.commission=function(){
     <select onchange="commYM=this.value;render()">${months.map(m=>`<option value="${m}" ${m===commYM?'selected':''}>${monthLabelAr(m)}</option>`).join('')}</select></div>
     <button class="btn btn-primary" onclick="window.print()">${icon('file')} ${t('print')}</button></div>`;
   const agg=aggregateMonth(commYM);
-  const supplied={p92:agg.incoming.p92,p95:agg.incoming.p95,solar:agg.incoming.solar};
-  const prods=[['p92','92',eg.p92],['p95','95',eg.p95],['solar',t('solar'),eg.solar]];
+  const supplied={p80:agg.incoming.p80,p92:agg.incoming.p92,p95:agg.incoming.p95,solar:agg.incoming.solar};
+  const prods=((agg.incoming.p80||agg.L.p80)?[['p80','80',eg.p80]]:[]).concat([['p92','92',eg.p92],['p95','95',eg.p95],['solar',t('solar'),eg.solar]]);
   const pct=n(eg.percent), tax=n(eg.tax);
   let T={sales:0,egpc:0,total:0,tax:0,net:0};
   const rows=prods.map(([k,lbl,rate])=>{
@@ -1740,6 +1757,7 @@ VIEWS.settings=function(){
       <div class="sect-head" style="margin-top:0"><h3>${t('price_comm_title')}</h3></div>
       <div class="note" style="margin-bottom:14px;border-inline-start-color:var(--brand2)">${icon('award')}<div>${t('price_comm_note')} — <b>${esc(branchName(APP.active.branch))}</b></div></div>
       <div class="form-grid">
+        ${branchFuels().includes('p80')?`<div class="field"><label>${t('price')} — ${t('p80')}</label><input type="number" step="any" value="${st.prices.p80||''}" oninput="setPrice('p80',this.value)"></div>`:''}
         <div class="field"><label>${t('price')} — ${t('p92')}</label><input type="number" step="any" value="${st.prices.p92}" oninput="setPrice('p92',this.value)"></div>
         <div class="field"><label>${t('price')} — ${t('p95')}</label><input type="number" step="any" value="${st.prices.p95}" oninput="setPrice('p95',this.value)"></div>
         <div class="field"><label>${t('price')} — ${t('solar')}</label><input type="number" step="any" value="${st.prices.solar}" oninput="setPrice('solar',this.value)"></div>
@@ -1747,6 +1765,15 @@ VIEWS.settings=function(){
         <div class="field"><label>${t('comm_solar')} (${t('liter')})</label><input type="number" step="any" value="${st.commission.solarRate}" oninput="setComm('solarRate',this.value)"></div>
       </div>
       <div class="hint">${t('price_comm_hint')}</div></div>`;
+    // branch fuel types (enable بنزين 80 per branch)
+    const bf=branchFuels();
+    h+=`<div class="card card-pad" style="margin-top:16px;border-color:var(--brand)">
+      <div class="sect-head" style="margin-top:0"><h3>${t('fuels_title')} — <span style="color:var(--brand2)">${esc(branchName(APP.active.branch))}</span></h3></div>
+      <div class="note" style="margin-bottom:14px;border-inline-start-color:var(--brand2)">${icon('droplet')}<div>${t('fuels_note')}</div></div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        ${FUEL_ORDER.map(f=>`<label style="display:flex;align-items:center;gap:7px;font-weight:700;cursor:pointer">
+          <input type="checkbox" ${bf.includes(f)?'checked':''} ${(f==='p92'||f==='p95'||f==='solar')?'':''} onchange="toggleFuel('${f}',this.checked)" style="width:auto"> ${fuelLbl(f)}</label>`).join('')}
+      </div></div>`;
     const eg=egpcSettings();
     h+=`<div class="card card-pad" style="margin-top:16px;border-color:var(--brand)">
       <div class="sect-head" style="margin-top:0"><h3>${t('egpc_rates_title')}</h3></div>
@@ -1765,7 +1792,17 @@ VIEWS.settings=function(){
   return h;
 };
 let _setTimer=null;
-function setPrice(k,v){branchSettings().prices[k]=n(v);saveDB();cloudSettingsDebounced();}
+function setPrice(k,v){if(!branchSettings().prices)branchSettings().prices={};branchSettings().prices[k]=n(v);saveDB();cloudSettingsDebounced();}
+function toggleFuel(f,on){
+  const s=branchSettings();
+  let list=Array.isArray(s.fuels)&&s.fuels.length?s.fuels.slice():branchFuels();
+  if(on){ if(!list.includes(f))list.push(f); }
+  else { list=list.filter(x=>x!==f); if(!list.length)list=['p92','p95','solar']; }
+  // keep canonical order
+  s.fuels=FUEL_ORDER.filter(x=>list.includes(x));
+  if(f==='p80'&&on&&(s.prices.p80===undefined))s.prices.p80=0;
+  saveDB();if(CLOUD.on)cloudSettingsDebounced();render();
+}
 function setComm(k,v){branchSettings().commission[k]=n(v);saveDB();cloudSettingsDebounced();}
 /* ---- collection companies (per branch) ---- */
 function addCompany(){
@@ -1980,6 +2017,7 @@ function delSupplier(id){if(!confirm(t('confirm_del')))return;DB.supplierEntries
    ============================================================ */
 const FUELS=[['p92','p92'],['p95','p95'],['solar','solar']];
 function newPumps(){return [0,1,2,3].map(()=>({start:'',end:''}));}
+function fuelObj(val){const o={};FUEL_ORDER.forEach(f=>o[f]=val);return o;}
 function shiftStore(kind){return kind==='digital'?(DB.shiftsDigital||(DB.shiftsDigital=[])):(DB.shifts||(DB.shifts=[]));}
 function lastShift(kind){
   const sh=shiftStore(kind);if(!sh.length)return null;
@@ -2006,10 +2044,14 @@ function emptyCollections(){const o={};collectionCompanies().forEach(c=>o[c.id]=
 function newShift(kind){
   kind=kind||'mech';
   const st=branchSettings();
+  const fuels=branchFuels();
+  const pumps={};fuels.forEach(f=>pumps[f]=carriedPumps(f,kind));
+  const calib={};fuels.forEach(f=>calib[f]='');
   return {kind:kind, date:new Date().toISOString().slice(0,10),lead:'',
+    fuels:fuels,
     prices:JSON.parse(JSON.stringify(st.prices)),
-    pumps:{p92:carriedPumps('p92',kind),p95:carriedPumps('p95',kind),solar:carriedPumps('solar',kind)},
-    calib:{p92:'',p95:'',solar:''},
+    pumps:pumps,
+    calib:calib,
     oils:'', oilLines:[{name:'',qty:'',price:''}],
     collections:emptyCollections(),
     collTimes:emptyCollections(),
@@ -2021,7 +2063,10 @@ function newShift(kind){
 }
 function ensureShiftShape(s){
   if(!s.kind)s.kind='mech';
-  if(!s.calib)s.calib={p92:'',p95:'',solar:''};
+  if(!Array.isArray(s.fuels)||!s.fuels.length)s.fuels=['p92','p95','solar'];
+  if(!s.pumps)s.pumps={};
+  if(!s.calib)s.calib={};
+  s.fuels.forEach(f=>{if(!s.pumps[f])s.pumps[f]=newPumps();if(s.calib[f]===undefined)s.calib[f]='';});
   if(s.deposit===undefined)s.deposit='';
   if(s.withdraw===undefined)s.withdraw='';
   // collections: make sure every current company has a key
@@ -2040,13 +2085,14 @@ function oilsTotal(s){
 }
 function computeShift(s){
   const pr=s.prices||{};const cal=s.calib||{};
-  const gross=f=>(s.pumps[f]||[]).reduce((a,p)=>a+Math.max(0,n(p.end)-n(p.start)),0);
-  const G={p92:gross('p92'),p95:gross('p95'),solar:gross('solar')};              // gross liters (before calibration)
-  const L={p92:Math.max(0,G.p92-n(cal.p92)),p95:Math.max(0,G.p95-n(cal.p95)),solar:Math.max(0,G.solar-n(cal.solar))}; // net = sold
-  const calibTot=n(cal.p92)+n(cal.p95)+n(cal.solar);
-  const amt={p92:L.p92*n(pr.p92),p95:L.p95*n(pr.p95),solar:L.solar*n(pr.solar)};
+  const fuels=shiftFuels(s);
+  const gross=f=>((s.pumps||{})[f]||[]).reduce((a,p)=>a+Math.max(0,n(p.end)-n(p.start)),0);
+  // keep all 4 keys present (0 when the branch doesn't sell that fuel) so aggregations stay safe
+  const G={p80:0,p92:0,p95:0,solar:0},L={p80:0,p92:0,p95:0,solar:0},amt={p80:0,p92:0,p95:0,solar:0};
+  let calibTot=0;
+  fuels.forEach(f=>{G[f]=gross(f);L[f]=Math.max(0,G[f]-n(cal[f]));amt[f]=L[f]*n(pr[f]);calibTot+=n(cal[f]);});
   const oils=oilsTotal(s);
-  const salesTotal=amt.p92+amt.p95+amt.solar+oils;
+  const salesTotal=amt.p80+amt.p92+amt.p95+amt.solar+oils;
   const col=s.collections||{};
   const colTotal=collectionCompanies().reduce((a,c)=>a+n(col[c.id]),0);
   const expTotal=sum(s.expenses||[],x=>x.amount);
@@ -2054,19 +2100,19 @@ function computeShift(s){
   const treasury=netCash+n(s.prevCash);
   const afterMoves=treasury+n(s.deposit)-n(s.withdraw);
   const cashInHand=afterMoves-n(s.bankDeposit);
-  const commB=(L.p92+L.p95)*n((s.commission||{}).benzeneRate);
+  const commB=(L.p80+L.p92+L.p95)*n((s.commission||{}).benzeneRate);   // all benzene grades
   const commS=L.solar*n((s.commission||{}).solarRate);
   return {G,L,calibTot,amt,oils,salesTotal,col,colTotal,expTotal,netCash,treasury,afterMoves,cashInHand,commB,commS,commTotal:commB+commS};
 }
 // total net liters for a kind on a given date (digital-vs-mechanical compare)
 function litersFor(kind,date){
-  const m={p92:0,p95:0,solar:0};
-  shiftStore(kind).filter(s=>s.date===date).forEach(s=>{const L=computeShift(s).L;m.p92+=L.p92;m.p95+=L.p95;m.solar+=L.solar;});
+  const m={p80:0,p92:0,p95:0,solar:0};
+  shiftStore(kind).filter(s=>s.date===date).forEach(s=>{const L=computeShift(s).L;m.p80+=L.p80;m.p92+=L.p92;m.p95+=L.p95;m.solar+=L.solar;});
   return m;
 }
 function litersForMonth(kind,ym){
-  const m={p92:0,p95:0,solar:0};
-  shiftStore(kind).filter(s=>(s.date||'').slice(0,7)===ym).forEach(s=>{const L=computeShift(s).L;m.p92+=L.p92;m.p95+=L.p95;m.solar+=L.solar;});
+  const m={p80:0,p92:0,p95:0,solar:0};
+  shiftStore(kind).filter(s=>(s.date||'').slice(0,7)===ym).forEach(s=>{const L=computeShift(s).L;m.p80+=L.p80;m.p92+=L.p92;m.p95+=L.p95;m.solar+=L.solar;});
   return m;
 }
 function calibForMonth(kind,ym){
@@ -2168,8 +2214,8 @@ function renderShiftForm(){
   const comps=collectionCompanies();
   // 3-column layout mirroring the paper/print: بنزين RIGHT, مبيعات/خزينة MIDDLE, تحصيل/مصروفات LEFT
   h+=`<div class="shift-grid">
-    <div class="card card-pad shcol">
-      ${fuelTable('p92')}${fuelTable('p95')}${fuelTable('solar')}
+    <div class="card card-pad shcol" style="order:3">
+      ${shiftFuels(s).map(f=>fuelTable(f)).join('')}
       <div class="form-sec">${t('handover')}</div>
       <table class="form-tbl"><thead><tr><th>${t('label')}</th><th>95</th><th>92</th><th>${t('solar')}</th><th>${t('shift_name')}</th></tr></thead><tbody>
         <tr><td class="lbl">${t('start_row')} <span style="color:var(--txt3);font-weight:600">(${t('carried')})</span></td>
@@ -2185,12 +2231,10 @@ function renderShiftForm(){
       </tbody></table>
     </div>
 
-    <div class="card card-pad shcol">
+    <div class="card card-pad shcol" style="order:2">
       <div class="form-sec">${t('sales_by_product')}</div>
       <table class="form-tbl"><thead><tr><th>${t('type')}</th><th>${t('liters_sold')}</th><th>${t('price')}</th><th>${t('amount')}</th></tr></thead><tbody>
-        <tr><td class="lbl">92</td><td class="ro"><span id="sp_lit_p92">0</span></td><td class="ro">${fmt(s.prices.p92,2)}</td><td class="ro"><span id="sp_amt_p92" class="calc">0</span></td></tr>
-        <tr><td class="lbl">95</td><td class="ro"><span id="sp_lit_p95">0</span></td><td class="ro">${fmt(s.prices.p95,2)}</td><td class="ro"><span id="sp_amt_p95" class="calc">0</span></td></tr>
-        <tr><td class="lbl">${t('solar')}</td><td class="ro"><span id="sp_lit_solar">0</span></td><td class="ro">${fmt(s.prices.solar,2)}</td><td class="ro"><span id="sp_amt_solar" class="calc">0</span></td></tr>
+        ${shiftFuels(s).map(f=>`<tr><td class="lbl">${fuelLbl(f)}</td><td class="ro"><span id="sp_lit_${f}">0</span></td><td class="ro">${fmt(s.prices[f],2)}</td><td class="ro"><span id="sp_amt_${f}" class="calc">0</span></td></tr>`).join('')}
         <tr><td class="lbl">${t('oils_sales')}</td><td colspan="2" class="ro" style="text-align:center;color:var(--txt3);font-size:11px">${t('from_below')}</td><td class="ro"><span id="sp_oil" class="calc">0</span></td></tr>
         <tr><td class="lbl calc">${t('shift_total')}</td><td colspan="2"></td><td class="ro"><span id="c_sales0" class="calc">0</span></td></tr>
       </tbody></table>
@@ -2229,7 +2273,7 @@ function renderShiftForm(){
       <tbody id="incBody">${s.incoming.map((e,i)=>incRow(e,i)).join('')}</tbody></table>
     </div>
 
-    <div class="card card-pad shcol">
+    <div class="card card-pad shcol" style="order:1">
       <div class="form-sec">${t('collections')} <span style="color:var(--txt3);font-weight:600;font-size:11px">(${t('from_settings')})</span></div>
       <table class="form-tbl"><thead><tr><th>${t('type')}</th><th>${t('amount')}</th><th>${t('delivery_time')}</th></tr></thead><tbody>
         ${comps.map(co=>
@@ -2302,7 +2346,8 @@ function expRow(e,i){return `<tr><td><input class="side-in" style="text-align:st
   <td>${partnerSelect(i,e.partnerId)}</td>
   <td><input class="side-in" style="text-align:center" value="${esc(e.time||'')}" oninput="shSet('expenses.${i}.time',this.value)" placeholder="--:--"></td>
   <td class="no-print"><button class="btn btn-sm btn-ghost btn-danger" onclick="shDelExp(${i})">✕</button></td></tr>`;}
-function incRow(e,i){const opts=[['95','95'],['92','92'],['solar',t('solar')]];
+function incRow(e,i){const has80=shiftFuels(window._sh).includes('p80');
+  const opts=(has80?[['80','80']]:[]).concat([['95','95'],['92','92'],['solar',t('solar')]]);
   return `<tr><td><select class="side-in" style="text-align:center" onchange="shSet('incoming.${i}.type',this.value)">${opts.map(([v,l])=>`<option value="${v}" ${e.type===v?'selected':''}>${l}</option>`).join('')}</select></td>
   <td>${numCell(`incoming.${i}.qty`,e.qty)}</td>
   <td><input class="side-in" style="text-align:center" value="${esc(e.invoice||'')}" oninput="shSet('incoming.${i}.invoice',this.value)"></td>
@@ -2326,13 +2371,13 @@ function reRenderForm(){const v=document.getElementById('view');v.innerHTML=rend
 function shRecalc(){
   const c=computeShift(window._sh);const cal=window._sh.calib||{};
   const set=(id,v,dec)=>{const e=document.getElementById(id);if(e)e.textContent=fmt(v,dec);};
-  FUELS.forEach(([f])=>{
+  shiftFuels(window._sh).forEach(f=>{
     (window._sh.pumps[f]||[]).forEach((p,i)=>{const e=document.getElementById('diff_'+f+'_'+i);if(e)e.textContent=fmt(Math.max(0,n(p.end)-n(p.start)),0);});
     set('gross_'+f,c.G[f],0);set('calib_'+f,n(cal[f]),0);set('lit_'+f,c.L[f],0);set('amt_'+f,c.amt[f],0);});
   (window._sh.oilLines||[]).forEach((l,i)=>{const e=document.getElementById('oilamt_'+i);if(e)e.textContent=fmt(n(l.qty)*n(l.price),0);});
   set('oil_tot',oilsTotal(window._sh),0);
   // sales-by-product summary
-  FUELS.forEach(([f])=>{set('sp_lit_'+f,c.L[f],0);set('sp_amt_'+f,c.amt[f],0);});
+  shiftFuels(window._sh).forEach(f=>{set('sp_lit_'+f,c.L[f],0);set('sp_amt_'+f,c.amt[f],0);});
   set('sp_oil',c.oils,0);set('c_sales0',c.salesTotal);
   set('c_col',c.colTotal);set('c_col2',c.colTotal);set('c_exp',c.expTotal);set('c_exp2',c.expTotal);
   set('c_sales',c.salesTotal);set('c_net',c.netCash);set('c_treasury',c.treasury);set('c_cash',c.cashInHand);
@@ -2369,7 +2414,7 @@ function printShift(idx,kind){
       <div><div class="pp-t">${t('company')} — ${esc(branchName(APP.active.branch))}</div>
       <div class="pp-s">${title} · ${fmtDate(s.date)} · ${esc(s.lead||'')}</div></div></div>
     <div class="pp-grid">
-      <div class="pp-col" style="order:1">
+      <div class="pp-col" style="order:-1">
         <table class="pp"><tr><th colspan="3">${t('collections')}</th></tr>
           <tr><td class="h">${t('delivery_time')}</td><td class="h">${t('amount')}</td><td class="h">${t('type')}</td></tr>
           ${comps.map(co=>`<tr><td>${esc(ct[co.id]||'')}</td><td>${money0(s.collections[co.id])}</td><td class="h">${esc(co.name)}</td></tr>`).join('')}
@@ -2384,9 +2429,7 @@ function printShift(idx,kind){
       <div class="pp-col">
         <table class="pp"><tr><th colspan="4">${t('sales_by_product')}</th></tr>
           <tr><td class="h">${t('total')}</td><td class="h">${t('price')}</td><td class="h">${t('liters_sold')}</td><td class="h">${t('type')}</td></tr>
-          <tr><td class="b">${money0(c.amt.p92)}</td><td>${fmt(s.prices.p92,2)}</td><td>${fmt(c.L.p92,0)}</td><td class="h">92</td></tr>
-          <tr><td class="b">${money0(c.amt.p95)}</td><td>${fmt(s.prices.p95,2)}</td><td>${fmt(c.L.p95,0)}</td><td class="h">95</td></tr>
-          <tr><td class="b">${money0(c.amt.solar)}</td><td>${fmt(s.prices.solar,2)}</td><td>${fmt(c.L.solar,0)}</td><td class="h">${t('solar')}</td></tr>
+          ${shiftFuels(s).map(f=>`<tr><td class="b">${money0(c.amt[f])}</td><td>${fmt(s.prices[f],2)}</td><td>${fmt(c.L[f],0)}</td><td class="h">${fuelLbl(f)}</td></tr>`).join('')}
           <tr><td class="b">${money0(c.oils)}</td><td colspan="2" style="font-size:10px">${(s.oilLines||[]).filter(l=>l.qty||l.price).map(l=>`${esc(l.name||'')} ${fmt(l.qty,0)}×${fmt(l.price,2)}`).join(' + ')}</td><td class="h">${t('oils_sales')}</td></tr>
         </table>
         <table class="pp">
@@ -2403,7 +2446,7 @@ function printShift(idx,kind){
         </table>
         <table class="pp"><tr><th colspan="3">${t('comm_per_liter')}</th></tr>
           <tr><td class="h">${t('amount')}</td><td class="h">${t('comm_rate')}</td><td class="h">${t('liters_sold')}</td></tr>
-          <tr><td>${money0(c.commB)}</td><td>${fmt(s.commission.benzeneRate,3)}</td><td>${fmt(c.L.p92+c.L.p95,0)}</td></tr>
+          <tr><td>${money0(c.commB)}</td><td>${fmt(s.commission.benzeneRate,3)}</td><td>${fmt(c.L.p80+c.L.p92+c.L.p95,0)}</td></tr>
           <tr><td>${money0(c.commS)}</td><td>${fmt(s.commission.solarRate,3)}</td><td>${fmt(c.L.solar,0)}</td></tr>
           <tr><td class="b">${money0(c.commTotal)}</td><td class="h" colspan="2">${t('total')}</td></tr>
         </table>
@@ -2412,8 +2455,8 @@ function printShift(idx,kind){
           ${s.incoming.filter(e=>e.qty||e.invoice).map(e=>`<tr><td>${esc(e.note)}</td><td>${esc(e.invoice)}</td><td>${fmt(e.qty,0)}</td><td class="h">${e.type==='solar'?t('solar'):e.type}</td></tr>`).join('')||'<tr><td></td><td></td><td></td><td></td></tr>'}
         </table>
       </div>
-      <div class="pp-col" style="order:-1">
-        ${fuelBlock('p92')}${fuelBlock('p95')}${fuelBlock('solar')}
+      <div class="pp-col" style="order:1">
+        ${shiftFuels(s).map(f=>fuelBlock(f)).join('')}
         <table class="pp"><tr><th colspan="5">${t('handover')}</th></tr>
           <tr><td class="h">${t('label')}</td><td class="h">95</td><td class="h">92</td><td class="h">${t('solar')}</td><td class="h">${t('shift_name')}</td></tr>
           <tr><td class="h">${t('start_row')}</td><td>${s.handover.start.p95!==''?money0(s.handover.start.p95):''}</td><td>${s.handover.start.p92!==''?money0(s.handover.start.p92):''}</td><td>${s.handover.start.solar!==''?money0(s.handover.start.solar):''}</td><td>${esc(s.handover.startLead||'')}</td></tr>
@@ -2442,7 +2485,7 @@ let digMode='daily', digYM=null, digDate=null;
 
 function cmpCompanyName(){return '';}
 function digCompareTable(dig,mech,pr,title){
-  const prods=[['92','p92',pr.p92],['95','p95',pr.p95],[t('solar'),'solar',pr.solar]];
+  const prods=(((dig.p80||mech.p80))?[['80','p80',pr.p80]]:[]).concat([['92','p92',pr.p92],['95','p95',pr.p95],[t('solar'),'solar',pr.solar]]);
   return `<div class="card" style="margin-top:16px"><div class="card-head"><h3>${esc(title)}</h3></div>
     <div class="tbl-wrap"><table><thead><tr><th>${t('fuel_type')}</th><th class="t-num">${t('digital')}</th>
     <th class="t-num">${t('mechanical')}</th><th class="t-num">${t('diff_col')}</th><th class="t-num">${t('price')}</th><th class="t-num">${t('amount')} (${t('diff_col')})</th></tr></thead><tbody>
@@ -2451,9 +2494,9 @@ function digCompareTable(dig,mech,pr,title){
       <td class="t-num num">${fmt(m,0)}</td><td class="t-num num ${diff<0?'neg':'pos'}">${fmt(diff,0)}</td>
       <td class="t-num num">${fmt(price,2)}</td><td class="t-num num ${diff<0?'neg':'pos'}">${money(diff*n(price))}</td></tr>`;}).join('')}
     </tbody><tfoot><tr><td>${t('total')}</td>
-      <td class="t-num num">${fmt(dig.p92+dig.p95+dig.solar,0)}</td>
-      <td class="t-num num">${fmt(mech.p92+mech.p95+mech.solar,0)}</td>
-      <td class="t-num num">${fmt((dig.p92+dig.p95+dig.solar)-(mech.p92+mech.p95+mech.solar),0)}</td>
+      <td class="t-num num">${fmt(n(dig.p80)+dig.p92+dig.p95+dig.solar,0)}</td>
+      <td class="t-num num">${fmt(n(mech.p80)+mech.p92+mech.p95+mech.solar,0)}</td>
+      <td class="t-num num">${fmt((n(dig.p80)+dig.p92+dig.p95+dig.solar)-(n(mech.p80)+mech.p92+mech.p95+mech.solar),0)}</td>
       <td colspan="2"></td></tr></tfoot></table></div></div>`;
 }
 
@@ -2479,8 +2522,8 @@ VIEWS.digital_mech=function(){
       <select onchange="digDate=this.value;render()"><option value="">${t('all_months')}</option>${days.map(d=>`<option value="${d}" ${d===digDate?'selected':''}>${fmtDate(d)}</option>`).join('')}</select></div>`:''}
     <span class="spacer"></span><button class="btn" onclick="window.print()">${icon('file')} ${t('print')}</button></div>`;
   h+=`<div class="grid kpis">
-    ${kpi(t('shifts_digital'),fmt(dig.p92+dig.p95+dig.solar,0)+' '+t('liter'),'grid','ic-y')}
-    ${kpi(t('shifts'),fmt(mech.p92+mech.p95+mech.solar,0)+' '+t('liter'),'droplet','ic-b')}
+    ${kpi(t('shifts_digital'),fmt(n(dig.p80)+dig.p92+dig.p95+dig.solar,0)+' '+t('liter'),'grid','ic-y')}
+    ${kpi(t('shifts'),fmt(n(mech.p80)+mech.p92+mech.p95+mech.solar,0)+' '+t('liter'),'droplet','ic-b')}
   </div>`;
   h+=digCompareTable(dig,mech,pr,t('comparison')+' — '+fmtDate(digDate));
   return h;
@@ -2503,8 +2546,8 @@ function digMonthView(){
   const pr=branchSettings().prices||{};
   const calM=calibForMonth('mech',digYM), calD=calibForMonth('digital',digYM);
   h+=`<div class="grid kpis">
-    ${kpi(t('shifts_digital'),fmt(dig.p92+dig.p95+dig.solar,0)+' '+t('liter'),'grid','ic-y')}
-    ${kpi(t('shifts'),fmt(mech.p92+mech.p95+mech.solar,0)+' '+t('liter'),'droplet','ic-b')}
+    ${kpi(t('shifts_digital'),fmt(n(dig.p80)+dig.p92+dig.p95+dig.solar,0)+' '+t('liter'),'grid','ic-y')}
+    ${kpi(t('shifts'),fmt(n(mech.p80)+mech.p92+mech.p95+mech.solar,0)+' '+t('liter'),'droplet','ic-b')}
     ${kpi(t('calib_total')+' ('+t('shifts')+')',fmt(calM,0)+' '+t('liter'),'file','ic-r')}
     ${kpi(t('calib_total')+' ('+t('shifts_digital')+')',fmt(calD,0)+' '+t('liter'),'file','ic-r')}
   </div>`;
@@ -2548,12 +2591,12 @@ function shiftMonths(){
 }
 function aggregateMonth(ym){
   const shifts=(DB.shifts||[]).filter(s=>(s.date||'').slice(0,7)===ym);
-  const A={ym,count:shifts.length,L:{p92:0,p95:0,solar:0},amt:{p92:0,p95:0,solar:0},oils:0,
+  const A={ym,count:shifts.length,L:{p80:0,p92:0,p95:0,solar:0},amt:{p80:0,p92:0,p95:0,solar:0},oils:0,
     col:{bank:0,petroapp:0,octane:0,petropay:0},colTotal:0,expTotal:0,commB:0,commS:0,
-    salesTotal:0,netCash:0,deposits:0,incoming:{p92:0,p95:0,solar:0},expMap:{},expDetail:{}};
+    salesTotal:0,netCash:0,deposits:0,incoming:{p80:0,p92:0,p95:0,solar:0},expMap:{},expDetail:{}};
   shifts.forEach(s=>{
     const c=computeShift(s);
-    ['p92','p95','solar'].forEach(f=>{A.L[f]+=c.L[f];A.amt[f]+=c.amt[f];});
+    ['p80','p92','p95','solar'].forEach(f=>{A.L[f]+=c.L[f];A.amt[f]+=c.amt[f];});
     A.oils+=c.oils;A.salesTotal+=c.salesTotal;A.colTotal+=c.colTotal;A.expTotal+=c.expTotal;
     A.commB+=c.commB;A.commS+=c.commS;A.netCash+=c.netCash;A.deposits+=n(s.bankDeposit);
     ['bank','petroapp','octane','petropay'].forEach(k=>A.col[k]+=n((s.collections||{})[k]));
@@ -2561,7 +2604,7 @@ function aggregateMonth(ym){
       const band=e.partnerId?(((DB.partners||[]).find(x=>x.id===e.partnerId)||{}).name||e.label):e.label;
       if(band){A.expMap[band]=(A.expMap[band]||0)+n(e.amount);
         (A.expDetail[band]=A.expDetail[band]||[]).push({date:s.date,label:e.label,amount:n(e.amount)});}}});
-    (s.incoming||[]).forEach(e=>{const k=e.type==='solar'?'solar':(e.type==='92'?'p92':e.type==='95'?'p95':null);if(k)A.incoming[k]+=n(e.qty);});
+    (s.incoming||[]).forEach(e=>{const k=e.type==='solar'?'solar':(e.type==='80'?'p80':e.type==='92'?'p92':e.type==='95'?'p95':null);if(k)A.incoming[k]+=n(e.qty);});
   });
   return A;
 }
@@ -2601,6 +2644,7 @@ function monthAutoSheet(A){
     <div class="pp-s">${t('monthly')} (${t('auto_from_shifts')}) · ${monthLabelAr(A.ym)} · ${A.count} ${t('shifts_count')}</div></div></div>`;
   h+=`<div class="pp-grid" style="grid-template-columns:1fr 1fr">
     <table class="pp"><tr><th>${t('amount')}</th><th>${t('price')}</th><th>${t('liters_sold')}</th><th>${t('sales_by_product')}</th></tr>
+      ${A.L.p80||A.amt.p80?`<tr><td class="b">${money0(A.amt.p80)}</td><td></td><td>${money0(A.L.p80)}</td><td class="h">80</td></tr>`:''}
       <tr><td class="b">${money0(A.amt.p92)}</td><td></td><td>${money0(A.L.p92)}</td><td class="h">92</td></tr>
       <tr><td class="b">${money0(A.amt.p95)}</td><td></td><td>${money0(A.L.p95)}</td><td class="h">95</td></tr>
       <tr><td class="b">${money0(A.amt.solar)}</td><td></td><td>${money0(A.L.solar)}</td><td class="h">${t('solar')}</td></tr>
@@ -2623,10 +2667,11 @@ function monthAutoSheet(A){
       <tr><td class="b">${money0(A.expTotal)}</td><td class="h">${t('exp_total')}</td></tr></table></div>
     <div>
       <table class="pp"><tr><th>${t('amount')}</th><th>${t('comm_rate')}</th><th>${t('liters_sold')}</th><th>${t('comm_per_liter')}</th></tr>
-        <tr><td>${money0(A.commB)}</td><td></td><td>${money0(A.L.p92+A.L.p95)}</td><td class="h">${t('comm_benzene')}</td></tr>
+        <tr><td>${money0(A.commB)}</td><td></td><td>${money0(A.L.p80+A.L.p92+A.L.p95)}</td><td class="h">${t('comm_benzene')}</td></tr>
         <tr><td>${money0(A.commS)}</td><td></td><td>${money0(A.L.solar)}</td><td class="h">${t('comm_solar')}</td></tr>
         <tr><td class="b">${money0(A.commB+A.commS)}</td><td colspan="3" class="h">${t('total')}</td></tr></table>
       <table class="pp"><tr><th>${t('amount')} (${t('liter')})</th><th>${t('incoming')}</th></tr>
+        ${A.incoming.p80?`<tr><td>${money0(A.incoming.p80)}</td><td class="h">80</td></tr>`:''}
         <tr><td>${money0(A.incoming.p92)}</td><td class="h">92</td></tr>
         <tr><td>${money0(A.incoming.p95)}</td><td class="h">95</td></tr>
         <tr><td>${money0(A.incoming.solar)}</td><td class="h">${t('solar')}</td></tr></table>
@@ -3024,12 +3069,17 @@ function ieDel(id){
 /* ---------- current stock (fuel) ---------- */
 function stockSummary(){
   const op=openingStock();
-  const inc={p92:0,p95:0,solar:0},sold={p92:0,p95:0,solar:0};
+  const inc={p80:0,p92:0,p95:0,solar:0},sold={p80:0,p92:0,p95:0,solar:0};
   (DB.shifts||[]).forEach(s=>{const c=computeShift(s);
-    sold.p92+=c.L.p92;sold.p95+=c.L.p95;sold.solar+=c.L.solar;
-    (s.incoming||[]).forEach(e=>{const k=e.type==='solar'?'solar':e.type==='92'?'p92':e.type==='95'?'p95':null;if(k)inc[k]+=n(e.qty);});
+    sold.p80+=c.L.p80;sold.p92+=c.L.p92;sold.p95+=c.L.p95;sold.solar+=c.L.solar;
+    (s.incoming||[]).forEach(e=>{const k=e.type==='solar'?'solar':e.type==='80'?'p80':e.type==='92'?'p92':e.type==='95'?'p95':null;if(k)inc[k]+=n(e.qty);});
   });
-  return [['1','بنزين 92','p92'],['2','بنزين 95','p95'],['3','سولار','solar']].map(([code,name,k])=>
+  // show بنزين 80 only if this branch sells it (or it has data)
+  const fuels=branchFuels();
+  const rows=[];
+  if(fuels.includes('p80')||inc.p80||sold.p80)rows.push(['0','بنزين 80','p80']);
+  rows.push(['1','بنزين 92','p92'],['2','بنزين 95','p95'],['3','سولار','solar']);
+  return rows.map(([code,name,k])=>
     ({code,name,k,open:n(op[k]),inc:inc[k],sold:sold[k],cur:n(op[k])+inc[k]-sold[k]}));
 }
 function setOpenStock(k,v){openingStock()[k]=v===''?'':n(v);saveDB();cloudSettingsDebounced();}
