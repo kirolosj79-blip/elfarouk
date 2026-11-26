@@ -38,6 +38,21 @@ const DICT = {
   companies_note:{ar:'الشركات دي بتظهر في خانة التحصيل في تقفيل الوردية. تقدر تضيف/تعدّل/تمسح، وكل فرع ليه شركاته.',en:'These appear in the collections box of the shift closing. Add/edit/remove — each branch has its own.'},
   company_name:{ar:'اسم الشركة',en:'Company name'},
   add_company:{ar:'إضافة شركة',en:'Add company'},
+  companies:{ar:'الشركات',en:'Companies'},
+  companies_sub:{ar:'حسابات بترو أب وأوكتين وبترو باي — ليك/عليك',en:'PetroApp, Octane, PetroPay accounts'},
+  companies_acc_note:{ar:'اللي بتحصّله من الشركة في الورديات = مستحق ليك عندها. لما تدّيك فلوس سجّلها، والرصيد بيوريك ليك/عليك كام.',en:'What you collect through the company is owed to you; log what they pay back.'},
+  collected_due:{ar:'محصّل (مستحق ليك)',en:'Collected (due)'},
+  company_paid:{ar:'دفعوا لك',en:'They paid you'},
+  balance_due_me:{ar:'الرصيد (ليك)',en:'Balance (owed to you)'},
+  they_owe_you:{ar:'مستحق ليك عندهم',en:'They owe you'},
+  you_owe_them:{ar:'مستحق عليك لهم',en:'You owe them'},
+  supplier_acc_note:{ar:'الكمية اللي بتتورّدلك في الوارد × سعر التوريد = مديونية عليك للمورد. سجّل مدفوعاتك والباقي بيظهر تلقائي.',en:'Supplied quantity × cost price = debt to the supplier; log payments.'},
+  you_owe_supplier:{ar:'مديونية عليك للمورد',en:'You owe the supplier'},
+  supply_price:{ar:'سعر التوريد',en:'Supply price'},
+  supply_prices:{ar:'أسعار التوريد (التكلفة)',en:'Supply (cost) prices'},
+  cost_fixed:{ar:'ثابت لحد ما تغيّره',en:'fixed until changed'},
+  supply:{ar:'توريد',en:'Supply'},
+  payment:{ar:'سداد',en:'Payment'},
   from_below:{ar:'من الجدول تحت',en:'from table below'},
   add_item_new:{ar:'إضافة صنف جديد',en:'Add new item'},
   monthly:{ar:'التقفيل الشهري',en:'Monthly Closing'},
@@ -48,8 +63,8 @@ const DICT = {
   commission_sub:{ar:'حافز هيئة البترول الشهري',en:'Monthly EGPC incentive'},
   channels:{ar:'قنوات التحصيل',en:'Collection Channels'},
   channels_sub:{ar:'بترو أب وأوكتين وبترو باي',en:'PetroApp, Octane & PetroPay'},
-  supplier:{ar:'حساب المورد',en:'Supplier Account'},
-  supplier_sub:{ar:'كشف حساب أولى إنرجي',en:'Oilibya Energy statement'},
+  supplier:{ar:'المورد (أورال)',en:'Supplier (Oral)'},
+  supplier_sub:{ar:'الوارد × سعر التوريد = مديونية، والمدفوعات والباقي',en:'Supply cost, payments & balance'},
   reports:{ar:'التقارير',en:'Reports'},
   reports_sub:{ar:'تقارير أسبوعية وشهرية وسنوية',en:'Weekly, monthly & yearly reports'},
   importexport:{ar:'الاستيراد والتصدير',en:'Import & Export'},
@@ -219,6 +234,11 @@ const DICT = {
   payment:{ar:'سداد',en:'Payment'},
   add_supply:{ar:'توريد جديد',en:'New supply'},
   add_payment:{ar:'سداد / دفعة',en:'Payment'},
+  profit_debts:{ar:'الأرباح والمديونيات',en:'Profit & Debts'},
+  revenue:{ar:'الإيرادات (مبيعات + عمولة)',en:'Revenue'},
+  fuel_cost:{ar:'تكلفة الوقود المباع',en:'Fuel cost (COGS)'},
+  net_profit:{ar:'صافي الربح',en:'Net profit'},
+  net_profit_formula:{ar:'صافي الربح = (مبيعات الوقود والزيوت + العمولة) − تكلفة الوقود المباع (لترات مباعة × سعر التوريد) − المصروفات.',en:'Net = sales + commission − fuel cost − expenses.'},
   supplier_name:{ar:'اسم المورد',en:'Supplier'},
   carried_balance:{ar:'رصيد مُرحّل',en:'Carried balance'},
   qty_liter:{ar:'الكمية (لتر)',en:'Qty (L)'},
@@ -496,7 +516,7 @@ function closeModal(){document.getElementById('modalRoot').innerHTML='';}
 const NAV=[
   {g:'g_main',items:[['dashboard','grid']]},
   {g:'g_ops',items:[['inventory','box'],['shifts','clock'],['shifts_digital','clock'],['digital_mech','grid']]},
-  {g:'g_fin',items:[['income_expense','card'],['monthly','trending'],['partners','wallet']]},
+  {g:'g_fin',items:[['income_expense','card'],['monthly','trending'],['companies','card'],['supplier','truck'],['partners','wallet']]},
   {g:'g_sys',items:[['reports','file'],['users','users'],['settings','gear']]},
 ];
 const SUPER_ONLY=['users'];
@@ -660,6 +680,7 @@ function defaultSettings(){
   return {prices:{p80:0,p92:22.25,p95:24,solar:20.5}, commission:{benzeneRate:0.5143,solarRate:0.358},
     egpc:{p80:0.5503,p92:0.5503,p95:0.671,solar:0.3811,percent:0.30,tax:0.02},
     openingStock:{p80:'',p92:'',p95:'',solar:''},
+    supplyPrices:{p80:'',p92:'',p95:'',solar:''},
     channelOpening:{bank:'',petroapp:'',octane:'',petropay:''},
     companies:defaultCompanies(),
     supplierName:'أولى إنرجي', supplierOpening:''};
@@ -819,6 +840,7 @@ alter table public.settings add column if not exists digital_entries  jsonb not 
 alter table public.settings add column if not exists ledger_manual    jsonb not null default '[]';
 alter table public.settings add column if not exists companies        jsonb not null default '[{"id":"bank","name":"بنك"},{"id":"petroapp","name":"بترو أب"},{"id":"octane","name":"أوكتين"},{"id":"petropay","name":"بترو باي"}]';
 alter table public.settings add column if not exists fuels            jsonb not null default '["p92","p95","solar"]';
+alter table public.settings add column if not exists supply_prices    jsonb not null default '{}';
 alter table public.settings add column if not exists supplier_name  text default 'أولى إنرجي';
 alter table public.settings add column if not exists supplier_opening numeric default 0;
 
@@ -988,7 +1010,7 @@ async function cloudLoadAll(user){
   APP.data={};
   visible.forEach(b=>{const d=emptyBranch();const st=setMap[b.id];
     if(st){d.settings={prices:st.prices,commission:st.commission,egpc:st.egpc||undefined,openingStock:st.opening_stock||undefined,
-        channelOpening:st.channel_opening||undefined,companies:(st.companies&&st.companies.length?st.companies:defaultCompanies()),fuels:(st.fuels&&st.fuels.length?st.fuels:undefined),supplierName:st.supplier_name||'أولى إنرجي',supplierOpening:st.supplier_opening||''};
+        channelOpening:st.channel_opening||undefined,companies:(st.companies&&st.companies.length?st.companies:defaultCompanies()),fuels:(st.fuels&&st.fuels.length?st.fuels:undefined),supplyPrices:st.supply_prices||undefined,supplierName:st.supplier_name||'أورال',supplierOpening:st.supplier_opening||''};
       d.partners=st.partners||[];d.partnerTxns=st.partner_txns||[];
       d.channelManual=st.channel_manual||[];d.supplierEntries=st.supplier_entries||[];d.digitalEntries=st.digital_entries||[];d.ledgerManual=st.ledger_manual||[];}
     APP.data[b.id]=d;});
@@ -1020,7 +1042,7 @@ async function cloudSaveMonthly(branchId,m){try{if(!m._id)m._id=genId();
 async function cloudSaveSettings(branchId,s){try{
   const d=APP.data[branchId]||{};
   await CLOUD.sb.from('settings').upsert({branch_id:branchId,prices:s.prices,commission:s.commission,egpc:s.egpc||null,
-    opening_stock:s.openingStock||null,channel_opening:s.channelOpening||{},companies:s.companies||defaultCompanies(),fuels:s.fuels||branchFuels(),supplier_name:s.supplierName||'أولى إنرجي',
+    opening_stock:s.openingStock||null,channel_opening:s.channelOpening||{},companies:s.companies||defaultCompanies(),fuels:s.fuels||branchFuels(),supply_prices:s.supplyPrices||{},supplier_name:s.supplierName||'أورال',
     supplier_opening:n(s.supplierOpening)||0,channel_manual:d.channelManual||[],supplier_entries:d.supplierEntries||[],digital_entries:d.digitalEntries||[],ledger_manual:d.ledgerManual||[],
     partners:d.partners||[],partner_txns:d.partnerTxns||[],updated_at:new Date().toISOString()});
 }catch(e){cloudErr(e);}}
@@ -1553,8 +1575,41 @@ VIEWS.supplier=function(){
 
 /* ---------------- REPORTS ---------------- */
 let repType='monthly_r', repFrom='', repTo='', repResult=null;
+let repSumYM='';
 VIEWS.reports=function(){
   let h=printHead(t('reports'));
+  // ---- profit & debts summary ----
+  const months=acctMonths([]);
+  const symOpts=['', ...months];
+  if(repSumYM&&!months.includes(repSumYM))repSumYM='';
+  const P=profitSummary(repSumYM);
+  const comps=collectionCompanies();
+  const compBal=comps.map(c=>({name:c.name,bal:runningLedger(companyEntries(c.id),n((branchSettings().channelOpening||{})[c.id]),'').closing}));
+  const supBal=runningLedger(supplyEntriesAuto().concat(supplierPayEntries()),n(branchSettings().supplierOpening),'').closing;
+  const compDue=compBal.reduce((a,c)=>a+Math.max(0,c.bal),0);
+  h+=`<div class="card card-pad" style="margin-bottom:16px;border-color:var(--brand)">
+    <div class="sect-head" style="margin-top:0"><h3>${t('profit_debts')}</h3>
+      <span class="spacer"></span>
+      <div class="field no-print" style="margin:0;min-width:150px"><select onchange="repSumYM=this.value;render()">
+        <option value="">${t('all_months')}</option>${months.map(m=>`<option value="${m}" ${m===repSumYM?'selected':''}>${monthLabelAr(m)}</option>`).join('')}</select></div></div>
+    <div class="grid kpis">
+      ${kpi(t('revenue'),money(P.revenue),'trending','ic-g')}
+      ${kpi(t('fuel_cost'),money(P.fuelCost),'truck','ic-b')}
+      ${kpi(t('expenses'),money(P.exp),'card','ic-r')}
+      ${kpi(t('net_profit'),money(P.net),'award',P.net<0?'ic-r':'ic-v')}
+    </div>
+    <div class="grid" style="grid-template-columns:1fr 1fr;gap:16px;margin-top:14px">
+      <div class="tbl-wrap"><table><thead><tr><th>${t('companies')}</th><th class="t-num">${t('balance_due_me')}</th></tr></thead><tbody>
+        ${compBal.map(c=>`<tr><td class="h">${esc(c.name)}</td><td class="t-num num ${c.bal<0?'neg':'pos'}">${money(c.bal)}</td></tr>`).join('')}
+        <tr><td class="h">${t('total')}</td><td class="t-num num" style="font-weight:800">${money(compDue)}</td></tr>
+      </tbody></table></div>
+      <div class="tbl-wrap"><table><thead><tr><th>${t('supplier')}</th><th class="t-num">${t('amount')}</th></tr></thead><tbody>
+        <tr><td class="h">${t('you_owe_supplier')}</td><td class="t-num num ${supBal>0?'neg':''}" style="font-weight:800">${money(Math.max(0,supBal))}</td></tr>
+        <tr><td>${t('net_profit')} (${repSumYM?monthLabelAr(repSumYM):t('all_months')})</td><td class="t-num num ${P.net<0?'neg':'pos'}" style="font-weight:800">${money(P.net)}</td></tr>
+      </tbody></table></div>
+    </div>
+    <div class="hint" style="margin-top:8px">${t('net_profit_formula')}</div>
+  </div>`;
   h+=`<div class="card card-pad no-print" style="margin-bottom:16px">
     <div class="seg" style="margin-bottom:14px">
       ${[['weekly','weekly'],['monthly_r','monthly_r'],['yearly','yearly'],['custom','custom']].map(([k])=>
@@ -1831,171 +1886,188 @@ function cloudSettingsDebounced(){if(!CLOUD.on)return;clearTimeout(_setTimer);co
 /* init moved to app_boot.js (runs after all modules load) */
 
 /* ============================================================
-   COLLECTION CHANNELS (auto withdrawals + manual deposits/fees)
-   SUPPLIER ACCOUNT (supply = qty×price debt, payments, running balance)
+   COMPANIES (بترو أب / أوكتين ...): what each company owes the
+   station = what was collected through it in the shifts, minus
+   what the company has actually paid back. Running balance.
+
+   SUPPLIER (المورد / أورال): fuel supplied to the station (from
+   the الوارد of the shifts) × a cost price per fuel = debt the
+   station owes the supplier, minus payments. Plus net profit.
    ============================================================ */
 function saveAccounts(){saveDB();if(CLOUD.on)cloudSettingsDebounced();}
+function fuelKeyFromType(tp){return tp==='solar'?'solar':tp==='80'?'p80':tp==='92'?'p92':tp==='95'?'p95':null;}
+function supplyPrices(){const s=branchSettings();if(!s.supplyPrices)s.supplyPrices={p80:'',p92:'',p95:'',solar:''};return s.supplyPrices;}
 
-/* ---------------- CHANNELS ---------------- */
-const CH_KEYS=[['bank','bank_visa'],['petroapp','petroapp'],['octane','octane'],['petropay','petropay']];
-function channelWithdrawByDate(channel){
-  const map={};
-  (DB.shifts||[]).forEach(s=>{const v=n((s.collections||{})[channel]);if(v)map[s.date]=(map[s.date]||0)+v;});
-  return map;
+/* generic month list from shifts + a manual list */
+function acctMonths(extraDates){
+  const set={};(DB.shifts||[]).forEach(s=>{if(s.date)set[s.date.slice(0,7)]=1;});
+  (extraDates||[]).forEach(d=>{if(d)set[d.slice(0,7)]=1;});
+  return Object.keys(set).sort().reverse();
 }
-function channelLedger(channel){
-  const wd=channelWithdrawByDate(channel);
-  const manual=(DB.channelManual||[]).filter(x=>x.channel===channel);
-  const manMap={};manual.forEach(m=>{manMap[m.date]=m;});
-  const dates=Array.from(new Set([...Object.keys(wd),...manual.map(m=>m.date)])).sort();
-  const open=n((branchSettings().channelOpening||{})[channel]);
-  let run=open;const rows=[];
-  dates.forEach(d=>{
-    const w=n(wd[d]); const m=manMap[d]||{};
-    run += w - n(m.deposit) - n(m.fee);
-    rows.push({date:d,withdraw:w,deposit:n(m.deposit),fee:n(m.fee),note:m.note||'',bal:run,hasManual:!!manMap[d]});
+/* build a running ledger from entries[{date,plus,minus,...}]; when ym given,
+   show only that month with the balance carried in from before it */
+function runningLedger(entries,opening,ym){
+  entries=entries.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  let run=n(opening),before=n(opening);const rows=[];
+  entries.forEach(e=>{
+    const inMonth=!ym||(e.date||'').slice(0,7)===ym;
+    if(ym&&(e.date||'')<ym+'-00')before+=n(e.plus)-n(e.minus);
+    run+=n(e.plus)-n(e.minus);
+    if(inMonth)rows.push(Object.assign({},e,{bal:run}));
   });
-  return {open,rows,totW:sum(rows,r=>r.withdraw),totD:sum(rows,r=>r.deposit),totF:sum(rows,r=>r.fee),bal:run};
+  const totPlus=rows.reduce((a,r)=>a+n(r.plus),0),totMinus=rows.reduce((a,r)=>a+n(r.minus),0);
+  return {rows,opening:ym?before:n(opening),closing:run,totPlus,totMinus};
 }
-VIEWS.channels=function(){
-  let h=printHead(t('channels'));
-  h+=`<div class="note no-print" style="margin-bottom:14px">${icon('card')}<div>${t('channel_note')}</div></div>`;
+
+/* ---------------- COMPANIES ---------------- */
+let compSel=null, compYM='';
+function companyCollected(cid){const map={};(DB.shifts||[]).forEach(s=>{const v=n((s.collections||{})[cid]);if(v)map[s.date]=(map[s.date]||0)+v;});return map;}
+function companyEntries(cid){
+  const col=companyCollected(cid);
+  const manual=(DB.channelManual||[]).filter(x=>x.channel===cid);
+  const manMap={};manual.forEach(m=>{manMap[m.date]=m;});
+  const dates=Array.from(new Set([...Object.keys(col),...manual.map(m=>m.date)])).sort();
+  return dates.map(d=>{const m=manMap[d]||{};
+    return {date:d,plus:n(col[d]),minus:n(m.deposit)+n(m.fee),deposit:n(m.deposit),fee:n(m.fee),note:m.note||'',hasManual:!!manMap[d]};});
+}
+VIEWS.companies=function(){
+  const comps=collectionCompanies();
+  if(!compSel||!comps.find(c=>c.id===compSel))compSel=comps[0]?comps[0].id:'bank';
+  const months=acctMonths((DB.channelManual||[]).map(m=>m.date));
+  const ym=compYM&&months.includes(compYM)?compYM:'';
+  const opening=n((branchSettings().channelOpening||{})[compSel]);
+  const L=runningLedger(companyEntries(compSel),opening,ym);
+  const coName=(comps.find(c=>c.id===compSel)||{}).name||'';
+  let h=printHead(t('companies')+' — '+coName+(ym?(' · '+monthLabelAr(ym)):''));
+  h+=`<div class="note no-print" style="margin-bottom:14px">${icon('card')}<div>${t('companies_acc_note')}</div></div>`;
   h+=`<div class="seg no-print" style="margin-bottom:14px">
-    ${CH_KEYS.map(([k,lbl])=>`<button class="${chanSel===k?'on':''}" onclick="chanSel='${k}';render()">${t(lbl)}</button>`).join('')}</div>`;
-  if(!CH_KEYS.find(c=>c[0]===chanSel))chanSel='bank';
-  const L=channelLedger(chanSel);
+    ${comps.map(c=>`<button class="${compSel===c.id?'on':''}" onclick="compSel='${c.id}';render()">${esc(c.name)}</button>`).join('')}</div>`;
+  h+=`<div class="toolbar no-print">
+    <div class="field" style="margin:0;min-width:160px"><select onchange="compYM=this.value;render()">
+      <option value="">${t('all_months')}</option>${months.map(m=>`<option value="${m}" ${m===ym?'selected':''}>${monthLabelAr(m)}</option>`).join('')}</select></div>
+    <span class="spacer"></span>
+    ${canEdit()?`<button class="btn btn-primary" onclick="editCompanyPay()">${icon('card')} ${t('company_paid')}</button>`:''}
+    <button class="btn" onclick="window.print()">${t('print')}</button></div>`;
   h+=`<div class="grid kpis">
-    ${kpi(t('opening_bal'),money(L.open),'card','ic-b')}
-    ${kpi(t('withdrawals'),money(L.totW),'trending','ic-g')}
-    ${kpi(t('deposit'),money(L.totD),'truck','ic-y')}
-    ${kpi(t('running_bal'),money(L.bal),'award',L.bal<0?'ic-r':'ic-v')}
+    ${kpi(t('collected_due'),money(L.totPlus),'trending','ic-g')}
+    ${kpi(t('company_paid'),money(L.totMinus),'truck','ic-y')}
+    ${kpi(t('balance_due_me'),money(L.closing),'award',L.closing<0?'ic-r':'ic-v')}
   </div>`;
-  h+=`<div class="toolbar no-print" style="margin-top:16px">
-    <button class="btn btn-primary" onclick="editChannelEntry()">${icon('card')} ${t('add_entry')}</button>
-    <span class="spacer"></span><button class="btn" onclick="window.print()">${t('print')}</button></div>`;
-  h+=`<div class="card"><div class="tbl-wrap"><table><thead><tr><th>${t('date')}</th>
-    <th class="t-num">${t('withdrawals_auto')}</th><th class="t-num">${t('deposit')}</th><th class="t-num">${t('service_fee')}</th>
-    <th>${t('notes')}</th><th class="t-num">${t('running_bal')}</th><th class="no-print"></th></tr></thead><tbody>
+  h+=`<div class="card" style="margin-top:16px"><div class="tbl-wrap"><table><thead><tr><th>${t('date')}</th>
+    <th class="t-num">${t('collected_due')}</th><th class="t-num">${t('company_paid')}</th><th class="t-num">${t('service_fee')}</th>
+    <th>${t('notes')}</th><th class="t-num">${t('balance')}</th><th class="no-print"></th></tr></thead><tbody>
+    <tr style="background:var(--panel2)"><td class="num">—</td><td colspan="4">${t('carried_balance')}</td><td class="t-num num" style="font-weight:700">${fmt(L.opening)}</td><td class="no-print"></td></tr>
     ${L.rows.map(r=>`<tr><td class="num">${fmtDate(r.date)}</td>
-      <td class="t-num num pos">${r.withdraw?fmt(r.withdraw):'—'}</td>
+      <td class="t-num num pos">${r.plus?fmt(r.plus):'—'}</td>
       <td class="t-num num">${r.deposit?fmt(r.deposit):'—'}</td><td class="t-num num">${r.fee?fmt(r.fee,2):'—'}</td>
       <td style="color:var(--txt2);font-size:12px">${esc(r.note)}</td><td class="t-num num" style="font-weight:700">${fmt(r.bal)}</td>
-      <td class="no-print"><button class="btn btn-sm btn-ghost" onclick="editChannelEntry('${r.date}')">${t('edit')}</button></td></tr>`).join('')
-      ||`<tr><td colspan="7" class="empty">${t('no_data')}</td></tr>`}
-    </tbody><tfoot><tr><td>${t('total')}</td><td class="t-num num">${fmt(L.totW)}</td>
-    <td class="t-num num">${fmt(L.totD)}</td><td class="t-num num">${fmt(L.totF,2)}</td><td></td>
-    <td class="t-num num">${fmt(L.bal)}</td><td class="no-print"></td></tr></tfoot></table></div></div>`;
-  h+=`<div class="card card-pad no-print" style="margin-top:16px">
-    <div class="sect-head" style="margin-top:0"><h3>${t('set_opening')} — ${t(CH_KEYS.find(c=>c[0]===chanSel)[1])}</h3></div>
-    <div class="field" style="max-width:260px"><input type="number" step="any" value="${(branchSettings().channelOpening||{})[chanSel]||''}" oninput="setChannelOpening('${chanSel}',this.value)"></div></div>`;
+      <td class="no-print">${(r.hasManual&&canEdit())?`<button class="btn btn-sm btn-ghost" onclick="editCompanyPay('${r.date}')">${t('edit')}</button>`:''}</td></tr>`).join('')}
+    </tbody><tfoot><tr><td>${t('total')}</td><td class="t-num num">${fmt(L.totPlus)}</td>
+    <td class="t-num num">${fmt(L.totMinus)}</td><td></td><td></td>
+    <td class="t-num num">${fmt(L.closing)}</td><td class="no-print"></td></tr></tfoot></table></div></div>`;
+  h+=`<div class="hint" style="margin-top:10px">${L.closing>=0?t('they_owe_you'):t('you_owe_them')}: <b>${money(Math.abs(L.closing))}</b></div>`;
+  if(isSuper())h+=`<div class="card card-pad no-print" style="margin-top:16px">
+    <div class="sect-head" style="margin-top:0"><h3>${t('set_opening')} — ${esc(coName)}</h3></div>
+    <div class="field" style="max-width:260px"><input type="number" step="any" value="${(branchSettings().channelOpening||{})[compSel]||''}" oninput="setCompanyOpening('${compSel}',this.value)"></div></div>`;
   return h;
 };
-function setChannelOpening(ch,v){const s=branchSettings();if(!s.channelOpening)s.channelOpening={};s.channelOpening[ch]=v===''?'':n(v);saveAccounts();}
-function editChannelEntry(date){
-  const existing=(DB.channelManual||[]).find(x=>x.channel===chanSel&&x.date===date)||{};
+function setCompanyOpening(cid,v){const s=branchSettings();if(!s.channelOpening)s.channelOpening={};s.channelOpening[cid]=v===''?'':n(v);saveAccounts();}
+function editCompanyPay(date){
+  if(!canEdit())return;
+  const existing=(DB.channelManual||[]).find(x=>x.channel===compSel&&x.date===date)||{};
   const d=date||new Date().toISOString().slice(0,10);
-  modal(t('add_entry'),
+  modal(t('company_paid'),
     `<div class="form-grid">
       <div class="field"><label>${t('date')}</label><input id="ce_date" type="date" value="${esc(existing.date||d)}"></div>
-      <div class="field"><label>${t('deposit')}</label><input id="ce_dep" type="number" step="any" value="${existing.deposit!=null?existing.deposit:''}"></div>
+      <div class="field"><label>${t('company_paid')}</label><input id="ce_dep" type="number" step="any" value="${existing.deposit!=null?existing.deposit:''}"></div>
       <div class="field"><label>${t('service_fee')}</label><input id="ce_fee" type="number" step="any" value="${existing.fee!=null?existing.fee:''}"></div>
     </div><div class="field"><label>${t('notes')}</label><input id="ce_note" value="${esc(existing.note||'')}"></div>`,
     `<button class="btn btn-ghost" onclick="closeModal()">${t('cancel')}</button>
-     <button class="btn btn-primary" onclick="saveChannelEntry()">${t('save')}</button>`);
+     ${date?`<button class="btn btn-ghost btn-danger" onclick="delCompanyPay('${date}')">${t('del')}</button>`:''}
+     <button class="btn btn-primary" onclick="saveCompanyPay()">${t('save')}</button>`);
 }
-function saveChannelEntry(){
+function saveCompanyPay(){
   const g=id=>document.getElementById(id).value;
-  const date=g('ce_date');const rec={channel:chanSel,date,deposit:g('ce_dep')===''?'':n(g('ce_dep')),fee:g('ce_fee')===''?'':n(g('ce_fee')),note:g('ce_note')};
+  const date=g('ce_date');const rec={channel:compSel,date,deposit:g('ce_dep')===''?'':n(g('ce_dep')),fee:g('ce_fee')===''?'':n(g('ce_fee')),note:g('ce_note')};
   DB.channelManual=DB.channelManual||[];
-  const i=DB.channelManual.findIndex(x=>x.channel===chanSel&&x.date===date);
+  const i=DB.channelManual.findIndex(x=>x.channel===compSel&&x.date===date);
   if(i>=0)DB.channelManual[i]=rec;else DB.channelManual.push(rec);
   saveAccounts();closeModal();toast(t('saved'));render();
 }
+function delCompanyPay(date){DB.channelManual=(DB.channelManual||[]).filter(x=>!(x.channel===compSel&&x.date===date));saveAccounts();closeModal();toast(t('deleted'));render();}
 
-/* ---------------- SUPPLIER ---------------- */
-function supplierLedger(){
-  const open=n(branchSettings().supplierOpening);
-  const entries=(DB.supplierEntries||[]).slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''));
-  let run=open;const rows=[{date:null,inv:'',desc:t('carried_balance'),credit:open,debit:0,bal:open,carried:true}];
-  entries.forEach(e=>{const credit=n(e.credit),debit=n(e.debit);run+=credit-debit;rows.push({id:e.id,date:e.date,inv:e.inv||'',desc:e.desc,credit,debit,bal:run});});
-  return {open,rows,totC:sum(entries,e=>e.credit),totD:sum(entries,e=>e.debit),bal:run};
+/* ---------------- SUPPLIER (أورال) ---------------- */
+let supYM='';
+// supply entries (auto from every shift's incoming) × cost price
+function supplyEntriesAuto(){
+  const sp=supplyPrices();const out=[];
+  (DB.shifts||[]).forEach(s=>{(s.incoming||[]).forEach(e=>{
+    const fk=fuelKeyFromType(e.type);const q=n(e.qty);if(!fk||!q)return;
+    const price=n(sp[fk]);const cost=q*price;
+    out.push({date:s.date,inv:e.invoice||'',fk,qty:q,price,plus:cost,minus:0,kind:'supply'});
+  });});
+  return out;
+}
+function supplierPayEntries(){
+  return (DB.supplierEntries||[]).filter(e=>e.type==='payment').map(e=>({id:e.id,date:e.date,inv:'',plus:0,minus:n(e.debit),desc:e.desc||t('payment'),kind:'payment'}));
 }
 VIEWS.supplier=function(){
-  const name=branchSettings().supplierName||t('supplier');
-  const L=supplierLedger();
-  let h=printHead(name);
-  h+=`<div class="note no-print" style="margin-bottom:14px">${icon('truck')}<div>${t('supplier_note')}</div></div>`;
-  h+=`<div class="grid kpis">
-    ${kpi(t('total_supply'),money(L.totC),'truck','ic-b')}
-    ${kpi(t('total_paid'),money(L.totD),'card','ic-g')}
-    ${kpi(t('current_balance'),money(L.bal),'file',L.bal>0?'ic-r':'ic-g')}
-  </div>`;
-  h+=`<div class="toolbar no-print" style="margin-top:16px">
-    <button class="btn btn-primary" onclick="supplySupplyForm()">${icon('truck')} ${t('add_supply')}</button>
-    <button class="btn" onclick="supplyPaymentForm()">${t('add_payment')}</button>
+  const name=branchSettings().supplierName||'أورال';
+  const months=acctMonths((DB.supplierEntries||[]).map(e=>e.date));
+  const ym=supYM&&months.includes(supYM)?supYM:'';
+  const entries=supplyEntriesAuto().concat(supplierPayEntries());
+  const L=runningLedger(entries,n(branchSettings().supplierOpening),ym);
+  let h=printHead(t('supplier')+' — '+name+(ym?(' · '+monthLabelAr(ym)):''));
+  h+=`<div class="note no-print" style="margin-bottom:14px">${icon('truck')}<div>${t('supplier_acc_note')}</div></div>`;
+  h+=`<div class="toolbar no-print">
+    <div class="field" style="margin:0;min-width:160px"><select onchange="supYM=this.value;render()">
+      <option value="">${t('all_months')}</option>${months.map(m=>`<option value="${m}" ${m===ym?'selected':''}>${monthLabelAr(m)}</option>`).join('')}</select></div>
     <span class="pill">${esc(name)}</span>
-    <span class="spacer"></span><button class="btn" onclick="window.print()">${t('print')}</button></div>`;
-  h+=`<div class="card"><div class="tbl-wrap"><table><thead><tr><th>${t('date')}</th><th>${t('invoice')}</th>
-    <th>${t('statement')}</th><th class="t-num">${t('debit')}</th><th class="t-num">${t('credit')}</th><th class="t-num">${t('balance')}</th><th class="no-print"></th></tr></thead><tbody>
-    ${L.rows.map(r=>`<tr${r.carried?' style="background:var(--panel2)"':''}><td class="num">${r.date?fmtDate(r.date):'—'}</td><td class="num">${esc(r.inv)||'—'}</td>
-      <td>${esc(r.desc)}</td><td class="t-num num">${r.debit?fmt(r.debit):'—'}</td>
-      <td class="t-num num">${r.credit?fmt(r.credit):'—'}</td><td class="t-num num" style="font-weight:700">${fmt(r.bal)}</td>
-      <td class="no-print">${r.carried?'':`<button class="btn btn-sm btn-ghost btn-danger" onclick="delSupplier('${r.id}')">${t('del')}</button>`}</td></tr>`).join('')}
-    </tbody><tfoot><tr><td colspan="3">${t('total')}</td><td class="t-num num">${fmt(L.totD)}</td>
-    <td class="t-num num">${fmt(L.totC)}</td><td class="t-num num">${fmt(L.bal)}</td><td class="no-print"></td></tr></tfoot></table></div></div>`;
-  h+=`<div class="card card-pad no-print" style="margin-top:16px"><div class="form-grid">
-    <div class="field"><label>${t('supplier_name')}</label><input value="${esc(name)}" oninput="setSupplierField('supplierName',this.value)"></div>
-    <div class="field"><label>${t('carried_balance')}</label><input type="number" step="any" value="${branchSettings().supplierOpening||''}" oninput="setSupplierField('supplierOpening',this.value)"></div>
-  </div></div>`;
+    <span class="spacer"></span>
+    ${canEdit()?`<button class="btn btn-primary" onclick="supplyPaymentForm()">${icon('card')} ${t('add_payment')}</button>`:''}
+    <button class="btn" onclick="window.print()">${t('print')}</button></div>`;
+  h+=`<div class="grid kpis">
+    ${kpi(t('total_supply'),money(L.totPlus),'truck','ic-b')}
+    ${kpi(t('total_paid'),money(L.totMinus),'card','ic-g')}
+    ${kpi(t('you_owe_supplier'),money(L.closing),'file',L.closing>0?'ic-r':'ic-g')}
+  </div>`;
+  h+=`<div class="card" style="margin-top:16px"><div class="tbl-wrap"><table><thead><tr><th>${t('date')}</th><th>${t('invoice')}</th>
+    <th>${t('statement')}</th><th class="t-num">${t('qty')}</th><th class="t-num">${t('supply_price')}</th>
+    <th class="t-num">${t('debit')} (دين)</th><th class="t-num">${t('credit')} (سداد)</th><th class="t-num">${t('balance')}</th><th class="no-print"></th></tr></thead><tbody>
+    <tr style="background:var(--panel2)"><td>—</td><td></td><td>${t('carried_balance')}</td><td colspan="4"></td><td class="t-num num" style="font-weight:700">${fmt(L.opening)}</td><td class="no-print"></td></tr>
+    ${L.rows.map(r=>r.kind==='supply'
+      ?`<tr><td class="num">${fmtDate(r.date)}</td><td class="num">${esc(r.inv)||'—'}</td>
+         <td>${t('supply')} ${fuelLbl(r.fk)}</td><td class="t-num num">${fmt(r.qty,0)}</td><td class="t-num num">${fmt(r.price,2)}</td>
+         <td class="t-num num">${fmt(r.plus)}</td><td class="t-num num">—</td><td class="t-num num" style="font-weight:700">${fmt(r.bal)}</td><td class="no-print"></td></tr>`
+      :`<tr><td class="num">${fmtDate(r.date)}</td><td class="num">—</td>
+         <td>${esc(r.desc)}</td><td colspan="2"></td>
+         <td class="t-num num">—</td><td class="t-num num">${fmt(r.minus)}</td><td class="t-num num" style="font-weight:700">${fmt(r.bal)}</td>
+         <td class="no-print">${canDelete()?`<button class="btn btn-sm btn-ghost btn-danger" onclick="delSupplier('${r.id}')">${t('del')}</button>`:''}</td></tr>`).join('')}
+    </tbody><tfoot><tr><td colspan="5">${t('total')}</td><td class="t-num num">${fmt(L.totPlus)}</td>
+    <td class="t-num num">${fmt(L.totMinus)}</td><td class="t-num num">${fmt(L.closing)}</td><td class="no-print"></td></tr></tfoot></table></div></div>`;
+  h+=`<div class="hint" style="margin-top:10px">${t('you_owe_supplier')}: <b>${money(Math.max(0,L.closing))}</b></div>`;
+  if(isSuper()){
+    const sp=supplyPrices();
+    h+=`<div class="card card-pad no-print" style="margin-top:16px;border-color:var(--brand)">
+      <div class="sect-head" style="margin-top:0"><h3>${t('supply_prices')} <span style="color:var(--txt3);font-size:12px">(${t('cost_fixed')})</span></h3></div>
+      <div class="form-grid">
+        ${branchFuels().map(f=>`<div class="field"><label>${fuelLbl(f)}</label><input type="number" step="any" value="${sp[f]!=null?sp[f]:''}" oninput="setSupplyPrice('${f}',this.value)"></div>`).join('')}
+      </div>
+      <div class="form-grid" style="margin-top:8px">
+        <div class="field"><label>${t('supplier_name')}</label><input value="${esc(name)}" oninput="setSupplierField('supplierName',this.value)"></div>
+        <div class="field"><label>${t('carried_balance')}</label><input type="number" step="any" value="${branchSettings().supplierOpening||''}" oninput="setSupplierField('supplierOpening',this.value)"></div>
+      </div></div>`;
+  }
   return h;
 };
+function setSupplyPrice(f,v){supplyPrices()[f]=v===''?'':n(v);saveAccounts();}
 function setSupplierField(k,v){branchSettings()[k]=(k==='supplierOpening'?(v===''?'':n(v)):v);saveAccounts();}
-let _supLines=null;
-function supplySupplyForm(){
-  _supLines=[{product:'solar',qty:'',price:n((branchSettings().prices||{}).solar)}];
-  renderSupplyModal();
-}
-function renderSupplyModal(){
-  const prices=branchSettings().prices||{};
-  const prodOpts=[['92','92'],['95','95'],['solar',t('solar')]];
-  const linesHTML=_supLines.map((l,i)=>`<div class="form-grid" style="margin-bottom:6px">
-    <div class="field" style="margin-bottom:6px"><label>${i===0?t('supply_line'):''}</label>
-      <select onchange="_supLines[${i}].product=this.value;_supLines[${i}].price=(branchSettings().prices||{})[this.value==='solar'?'solar':this.value==='92'?'p92':'p95']||'';renderSupplyModal()">
-        ${prodOpts.map(([v,lb])=>`<option value="${v}" ${l.product===v?'selected':''}>${lb}</option>`).join('')}</select></div>
-    <div class="field" style="margin-bottom:6px"><label>${i===0?t('qty_liter'):''}</label><input type="number" step="any" value="${l.qty}" oninput="_supLines[${i}].qty=this.value;supplyTotal()"></div>
-    <div class="field" style="margin-bottom:6px"><label>${i===0?t('price'):''}</label><input type="number" step="any" value="${l.price}" oninput="_supLines[${i}].price=this.value;supplyTotal()"></div>
-  </div>`).join('');
-  modal(t('add_supply'),
-    `<div class="form-grid">
-      <div class="field"><label>${t('date')}</label><input id="su_date" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
-      <div class="field"><label>${t('invoice')}</label><input id="su_inv"></div>
-    </div>
-    <div class="sect-head" style="font-size:13px"><h3 style="font-size:13px">${t('supply_line')}</h3>
-      <button class="btn btn-sm" onclick="_supLines.push({product:'92',qty:'',price:(branchSettings().prices||{}).p92||''});renderSupplyModal()">${t('add_line')}</button></div>
-    ${linesHTML}
-    <div class="card card-pad" style="background:var(--panel2)"><table style="width:100%;font-size:14px">
-      <tr><td style="border:none;padding:4px 0;font-weight:800">${t('credit')} (دين)</td><td class="t-num num" id="su_total" style="border:none;padding:4px 0;font-weight:800"></td></tr></table></div>`,
-    `<button class="btn btn-ghost" onclick="closeModal()">${t('cancel')}</button>
-     <button class="btn btn-primary" onclick="saveSupply()">${t('save')}</button>`);
-  supplyTotal();
-}
-function supplyTotal(){const tot=_supLines.reduce((a,l)=>a+n(l.qty)*n(l.price),0);const e=document.getElementById('su_total');if(e)e.textContent=money(tot);}
-function saveSupply(){
-  const date=document.getElementById('su_date').value,inv=document.getElementById('su_inv').value;
-  const lines=_supLines.filter(l=>n(l.qty)&&n(l.price));
-  if(!lines.length){toast(t('qty_liter')+' ?','err');return;}
-  const credit=lines.reduce((a,l)=>a+n(l.qty)*n(l.price),0);
-  const desc='توريد '+lines.map(l=>`${fmt(l.qty,0)} لتر ${l.product==='solar'?'سولار':l.product}`).join(' و ');
-  DB.supplierEntries=DB.supplierEntries||[];
-  DB.supplierEntries.push({id:genId(),date,inv,type:'supply',desc,lines,credit,debit:0});
-  saveAccounts();closeModal();toast(t('saved'));render();
-}
 function supplyPaymentForm(){
   modal(t('add_payment'),
     `<div class="form-grid">
       <div class="field"><label>${t('date')}</label><input id="pay_date" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
       <div class="field"><label>${t('amount')}</label><input id="pay_amount" type="number" step="any"></div>
-    </div><div class="field"><label>${t('statement')}</label><input id="pay_desc" value="إيداع / تحويل"></div>`,
+    </div><div class="field"><label>${t('statement')}</label><input id="pay_desc" value="سداد للمورد"></div>`,
     `<button class="btn btn-ghost" onclick="closeModal()">${t('cancel')}</button>
      <button class="btn btn-primary" onclick="savePayment()">${t('save')}</button>`);
 }
@@ -2006,7 +2078,21 @@ function savePayment(){
   DB.supplierEntries.push({id:genId(),date:g('pay_date'),inv:'',type:'payment',desc:g('pay_desc'),lines:[],credit:0,debit});
   saveAccounts();closeModal();toast(t('saved'));render();
 }
-function delSupplier(id){if(!confirm(t('confirm_del')))return;DB.supplierEntries=(DB.supplierEntries||[]).filter(x=>x.id!==id);saveAccounts();toast(t('deleted'));render();}
+function delSupplier(id){if(!canDelete())return;if(!confirm(t('confirm_del')))return;DB.supplierEntries=(DB.supplierEntries||[]).filter(x=>x.id!==id);saveAccounts();toast(t('deleted'));render();}
+
+/* ---------------- profit + debts summary (used by reports) ---------------- */
+function profitSummary(ym){
+  const match=d=>!ym||(d||'').slice(0,7)===ym;
+  const sp=supplyPrices();
+  let fuelSales=0,oilSales=0,comm=0,exp=0,fuelCost=0;
+  (DB.shifts||[]).filter(s=>match(s.date)).forEach(s=>{const c=computeShift(s);
+    fuelSales+=c.amt.p80+c.amt.p92+c.amt.p95+c.amt.solar;oilSales+=c.oils;comm+=c.commTotal;exp+=c.expTotal;
+    ['p80','p92','p95','solar'].forEach(f=>{fuelCost+=c.L[f]*n(sp[f]);});
+  });
+  const revenue=fuelSales+oilSales+comm;
+  const net=revenue-fuelCost-exp;
+  return {fuelSales,oilSales,comm,exp,fuelCost,revenue,net};
+}
 
 /* ============================================================
    DAILY SHIFT CLOSING — detailed entry form + auto-calc + print
@@ -3153,7 +3239,7 @@ VIEWS.users=function(){
   h+=`<div class="note no-print" style="margin-top:16px">${icon('file')}<div>${t('disclaimer')}</div></div>`;
   return h;
 };
-const PAGE_LIST=[['dashboard'],['inventory'],['shifts'],['shifts_digital'],['digital_mech'],['income_expense'],['monthly'],['partners'],['reports']];
+const PAGE_LIST=[['dashboard'],['inventory'],['shifts'],['shifts_digital'],['digital_mech'],['income_expense'],['monthly'],['companies'],['supplier'],['partners'],['reports']];
 function editUser(id){
   const u=id?APP.users.find(x=>x.id===id):{name:'',username:'',password:'',role:'branch',branchId:'b1',pages:null};
   const pages=Array.isArray(u.pages)?u.pages:null;
