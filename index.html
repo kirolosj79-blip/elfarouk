@@ -2792,7 +2792,7 @@ function renderShiftForm(){
   const comps=collectionCompanies();
   // 3-column layout mirroring the paper/print: بنزين RIGHT, مبيعات/خزينة MIDDLE, تحصيل/مصروفات LEFT
   h+=`<div class="shift-grid">
-    <div class="card card-pad shcol" style="order:3">
+    <div class="card card-pad shcol" style="order:1">
       ${shiftFuels(s).map(f=>fuelTable(f)).join('')}
       <div class="form-sec">${t('handover')}</div>
       <table class="form-tbl"><thead><tr><th>${t('label')}</th><th>95</th><th>92</th><th>${t('solar')}</th><th>${t('shift_name')}</th></tr></thead><tbody>
@@ -2851,7 +2851,7 @@ function renderShiftForm(){
       <tbody id="incBody">${s.incoming.map((e,i)=>incRow(e,i)).join('')}</tbody></table>
     </div>
 
-    <div class="card card-pad shcol" style="order:1">
+    <div class="card card-pad shcol" style="order:3">
       <div class="form-sec">${t('collections')} <span style="color:var(--txt3);font-weight:600;font-size:11px">(${t('from_settings')})</span></div>
       <table class="form-tbl"><thead><tr><th>${t('type')}</th><th>${t('amount')}</th><th>${t('delivery_time')}</th></tr></thead><tbody>
         ${comps.map(co=>
@@ -2992,48 +2992,48 @@ function printShift(idx,kind){
       <div><div class="pp-t">${t('company')} — ${esc(branchName(APP.active.branch))}</div>
       <div class="pp-s">${title} · ${fmtDate(s.date)} · ${esc(s.lead||'')}</div></div></div>
     <div class="pp-grid">
-      <div class="pp-col" style="order:-1">
+      <div class="pp-col" style="order:1">
         <table class="pp"><tr><th colspan="3">${t('collections')}</th></tr>
-          <tr><td class="h">${t('delivery_time')}</td><td class="h">${t('amount')}</td><td class="h">${t('type')}</td></tr>
-          ${comps.map(co=>`<tr><td>${esc(ct[co.id]||'')}</td><td>${money0(s.collections[co.id])}</td><td class="h">${esc(co.name)}</td></tr>`).join('')}
-          <tr><td></td><td class="b">${money0(c.colTotal)}</td><td class="h">${t('total')}</td></tr>
+          <tr><td class="h">${t('type')}</td><td class="h">${t('amount')}</td><td class="h">${t('delivery_time')}</td></tr>
+          ${comps.map(co=>`<tr><td class="h">${esc(co.name)}</td><td>${money0(s.collections[co.id])}</td><td>${esc(ct[co.id]||'')}</td></tr>`).join('')}
+          <tr><td class="h">${t('total')}</td><td class="b">${money0(c.colTotal)}</td><td></td></tr>
         </table>
         <table class="pp"><tr><th colspan="2">${t('expenses')}</th></tr>
-          <tr><td class="h">${t('amount')}</td><td class="h">${t('expense_line')}</td></tr>
-          ${s.expenses.filter(e=>e.label||e.amount).map(e=>`<tr><td>${money0(e.amount)}</td><td>${esc(e.label)}</td></tr>`).join('')||'<tr><td></td><td></td></tr>'}
-          <tr><td class="b">${money0(c.expTotal)}</td><td class="h">${t('exp_total')}</td></tr>
+          <tr><td class="h">${t('expense_line')}</td><td class="h">${t('amount')}</td></tr>
+          ${s.expenses.filter(e=>e.label||e.amount).map(e=>`<tr><td>${esc(e.label)}</td><td>${money0(e.amount)}</td></tr>`).join('')||'<tr><td></td><td></td></tr>'}
+          <tr><td class="h">${t('exp_total')}</td><td class="b">${money0(c.expTotal)}</td></tr>
         </table>
       </div>
       <div class="pp-col">
         <table class="pp"><tr><th colspan="4">${t('sales_by_product')}</th></tr>
-          <tr><td class="h">${t('total')}</td><td class="h">${t('price')}</td><td class="h">${t('liters_sold')}</td><td class="h">${t('type')}</td></tr>
-          ${shiftFuels(s).map(f=>`<tr><td class="b">${money0(c.amt[f])}</td><td>${fmt(s.prices[f],2)}</td><td>${fmt(c.L[f],0)}</td><td class="h">${fuelLbl(f)}</td></tr>`).join('')}
-          <tr><td class="b">${money0(c.oils)}</td><td colspan="2" style="font-size:10px">${(s.oilLines||[]).filter(l=>l.qty||l.price).map(l=>`${esc(l.name||'')} ${fmt(l.qty,0)}×${fmt(l.price,2)}`).join(' + ')}</td><td class="h">${t('oils_sales')}</td></tr>
+          <tr><td class="h">${t('type')}</td><td class="h">${t('liters_sold')}</td><td class="h">${t('price')}</td><td class="h">${t('total')}</td></tr>
+          ${shiftFuels(s).map(f=>`<tr><td class="h">${fuelLbl(f)}</td><td>${fmt(c.L[f],0)}</td><td>${fmt(s.prices[f],2)}</td><td class="b">${money0(c.amt[f])}</td></tr>`).join('')}
+          <tr><td class="h">${t('oils_sales')}</td><td colspan="2" style="font-size:10px">${(s.oilLines||[]).filter(l=>l.qty||l.price).map(l=>`${esc(l.name||'')} ${fmt(l.qty,0)}×${fmt(l.price,2)}`).join(' + ')}</td><td class="b">${money0(c.oils)}</td></tr>
         </table>
         <table class="pp">
-          <tr><td class="b">${money0(c.salesTotal)}</td><td class="h">${t('shift_total')}</td></tr>
-          ${comps.map(co=>`<tr><td>${money0(s.collections[co.id])}</td><td class="h">${esc(co.name)}</td></tr>`).join('')}
-          <tr><td>${money0(c.expTotal)}</td><td class="h">${t('expenses')}</td></tr>
-          <tr><td class="b">${money0(c.netCash)}</td><td class="h">${t('net_after_exp')}</td></tr>
-          <tr><td>${money0(s.prevCash)}</td><td class="h">${t('prev_cash')}</td></tr>
-          <tr><td class="b">${money0(c.treasury)}</td><td class="h">${t('grand_total')}</td></tr>
-          <tr><td>${money0(s.deposit)}</td><td class="h">${t('deposit_ext')}</td></tr>
-          <tr><td>${money0(s.withdraw)}</td><td class="h">${t('withdraw_cash')}</td></tr>
-          <tr><td>${money0(s.bankDeposit)}</td><td class="h">${t('bank_deposit')}</td></tr>
-          <tr><td class="b">${money0(c.cashInHand)}</td><td class="h">${t('cash_in_hand')}</td></tr>
+          <tr><td class="h">${t('shift_total')}</td><td class="b">${money0(c.salesTotal)}</td></tr>
+          ${comps.map(co=>`<tr><td class="h">${esc(co.name)}</td><td>${money0(s.collections[co.id])}</td></tr>`).join('')}
+          <tr><td class="h">${t('expenses')}</td><td>${money0(c.expTotal)}</td></tr>
+          <tr><td class="h">${t('net_after_exp')}</td><td class="b">${money0(c.netCash)}</td></tr>
+          <tr><td class="h">${t('prev_cash')}</td><td>${money0(s.prevCash)}</td></tr>
+          <tr><td class="h">${t('grand_total')}</td><td class="b">${money0(c.treasury)}</td></tr>
+          <tr><td class="h">${t('deposit_ext')}</td><td>${money0(s.deposit)}</td></tr>
+          <tr><td class="h">${t('withdraw_cash')}</td><td>${money0(s.withdraw)}</td></tr>
+          <tr><td class="h">${t('bank_deposit')}</td><td>${money0(s.bankDeposit)}</td></tr>
+          <tr><td class="h">${t('cash_in_hand')}</td><td class="b">${money0(c.cashInHand)}</td></tr>
         </table>
         <table class="pp"><tr><th colspan="3">${t('comm_per_liter')}</th></tr>
-          <tr><td class="h">${t('amount')}</td><td class="h">${t('comm_rate')}</td><td class="h">${t('liters_sold')}</td></tr>
-          <tr><td>${money0(c.commB)}</td><td>${fmt(s.commission.benzeneRate,3)}</td><td>${fmt(c.L.p80+c.L.p92+c.L.p95,0)}</td></tr>
-          <tr><td>${money0(c.commS)}</td><td>${fmt(s.commission.solarRate,3)}</td><td>${fmt(c.L.solar,0)}</td></tr>
-          <tr><td class="b">${money0(c.commTotal)}</td><td class="h" colspan="2">${t('total')}</td></tr>
+          <tr><td class="h">${t('liters_sold')}</td><td class="h">${t('comm_rate')}</td><td class="h">${t('amount')}</td></tr>
+          <tr><td>${fmt(c.L.p80+c.L.p92+c.L.p95,0)}</td><td>${fmt(s.commission.benzeneRate,3)}</td><td>${money0(c.commB)}</td></tr>
+          <tr><td>${fmt(c.L.solar,0)}</td><td>${fmt(s.commission.solarRate,3)}</td><td>${money0(c.commS)}</td></tr>
+          <tr><td class="h" colspan="2">${t('total')}</td><td class="b">${money0(c.commTotal)}</td></tr>
         </table>
         <table class="pp"><tr><th colspan="4">${t('incoming')}</th></tr>
-          <tr><td class="h">${t('notes')}</td><td class="h">${t('invoice_no')}</td><td class="h">${t('qty')}</td><td class="h">${t('type')}</td></tr>
-          ${s.incoming.filter(e=>e.qty||e.invoice).map(e=>`<tr><td>${esc(e.note)}</td><td>${esc(e.invoice)}</td><td>${fmt(e.qty,0)}</td><td class="h">${e.type==='solar'?t('solar'):e.type}</td></tr>`).join('')||'<tr><td></td><td></td><td></td><td></td></tr>'}
+          <tr><td class="h">${t('type')}</td><td class="h">${t('qty')}</td><td class="h">${t('invoice_no')}</td><td class="h">${t('notes')}</td></tr>
+          ${s.incoming.filter(e=>e.qty||e.invoice).map(e=>`<tr><td class="h">${e.type==='solar'?t('solar'):e.type}</td><td>${fmt(e.qty,0)}</td><td>${esc(e.invoice)}</td><td>${esc(e.note)}</td></tr>`).join('')||'<tr><td></td><td></td><td></td><td></td></tr>'}
         </table>
       </div>
-      <div class="pp-col" style="order:1">
+      <div class="pp-col" style="order:-1">
         ${shiftFuels(s).map(f=>fuelBlock(f)).join('')}
         <table class="pp"><tr><th colspan="5">${t('handover')}</th></tr>
           <tr><td class="h">${t('label')}</td><td class="h">95</td><td class="h">92</td><td class="h">${t('solar')}</td><td class="h">${t('shift_name')}</td></tr>
